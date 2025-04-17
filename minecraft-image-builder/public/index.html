@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Image Builder</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .upload-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .file-input {
+            border: 2px dashed #3498db;
+            padding: 20px;
+            text-align: center;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .submit-btn {
+            background-color: #2ecc71;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        .submit-btn:hover {
+            background-color: #27ae60;
+        }
+        #progressIndicator {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-bar {
+            height: 20px;
+            background-color: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress {
+            height: 100%;
+            background-color: #3498db;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Minecraft Image Builder</h1>
+        <p>Upload an image to build it as pixel art in Minecraft!</p>
+        
+        <form id="uploadForm" class="upload-form" enctype="multipart/form-data">
+            <div class="file-input">
+                <input type="file" id="imageInput" name="image" accept="image/*" required>
+                <p>Click to select or drop an image here</p>
+            </div>
+            <button type="submit" class="submit-btn">Build in Minecraft</button>
+        </form>
+        
+        <div id="progressIndicator">
+            <h3>Building Progress</h3>
+            <p id="progressText">Processing image...</p>
+            <div class="progress-bar">
+                <div id="progressBar" class="progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const progressIndicator = document.getElementById('progressIndicator');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            
+            progressIndicator.style.display = 'block';
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    progressText.textContent = 'Image processed successfully. Building in Minecraft...';
+                    
+                    // Poll for progress updates
+                    const progressInterval = setInterval(() => {
+                        fetch('/progress')
+                            .then(response => response.json())
+                            .then(progressData => {
+                                const percent = progressData.progress;
+                                progressBar.style.width = `${percent}%`;
+                                progressText.textContent = progressData.message;
+                                
+                                if (percent >= 100) {
+                                    clearInterval(progressInterval);
+                                    progressText.textContent = 'Build complete!';
+                                }
+                            });
+                    }, 1000);
+                } else {
+                    progressText.textContent = 'Error: ' + data.message;
+                }
+            })
+            .catch(error => {
+                progressText.textContent = 'Error: ' + error.message;
+            });
+        });
+    </script>
+</body>
+</html> 
