@@ -1,20 +1,21 @@
-# Minecraft Image Builder
+# Minecraft Image Builder CLI
 
-A Node.js application that converts uploaded images into Minecraft pixel art using a Mineflayer bot.
+A command-line tool that uses Claude AI to convert images into Minecraft pixel art and then builds them in-game using a Mineflayer bot.
 
 ## Features
 
-- Express web server with image upload interface
-- Image pixelization using Sharp library
-- Claude API integration for optimal block color selection
+- Interactive CLI interface for image processing
+- Direct image processing with Claude AI
+- Claude determines the best Minecraft blocks to match image colors
 - Mineflayer bot that places blocks in the Minecraft world
-- Real-time progress tracking
+- Support for both vertical (wall) and horizontal (floor) builds
+- Outputs visualization and block map files
 
 ## Prerequisites
 
 - Node.js (v14+ recommended)
 - A running Minecraft server (Java Edition)
-- (Optional) Claude API key for intelligent block selection
+- Claude API key (required)
 
 ## Installation
 
@@ -31,38 +32,94 @@ cd minecraft-image-builder
 npm install
 ```
 
-3. Set up environment variables (optional):
+3. Set up environment variables:
 
 Create a `.env` file in the project root directory with the following variables:
 
 ```
-PORT=3000
 MC_HOST=localhost
 MC_PORT=25565
 MC_USERNAME=PixelArtBot
 MC_VERSION=1.19.2
-CLAUDE_API_KEY=your_claude_api_key
+CLAUDE_API_KEY=your_claude_api_key_here
+```
+
+The Claude API key is required. You can obtain a key by signing up at [anthropic.com](https://www.anthropic.com/).
+
+4. (Optional) Install globally to use as a command-line tool:
+
+```bash
+npm install -g .
 ```
 
 ## Usage
 
-1. Start your Minecraft server
+### Running as a local application
 
-2. Run the application:
+Start your Minecraft server, then run:
 
 ```bash
-node src/server.js
+npm start
 ```
 
-3. Open a web browser and navigate to `http://localhost:3000`
+### Running as a global CLI tool (if installed globally)
 
-4. Upload an image through the web interface
+```bash
+minecraft-image-builder
+```
 
-5. The image will be processed and built in Minecraft!
+### Interactive Prompts
+
+The CLI will guide you through the following steps:
+
+1. Enter the path to an image file
+2. Specify grid size (how many blocks wide/tall)
+3. Set build position (x,y,z coordinates in Minecraft)
+4. Choose build orientation (vertical wall or horizontal floor)
+5. Confirm to start building in Minecraft
+
+### Example Session
+
+```
+=== Minecraft Image Builder CLI ===
+Enter the path to an image file to build it in Minecraft.
+
+Image path: ./myimage.jpg
+Grid size (10-100, default: 50): 30
+Build position (x,y,z, default: 0,64,0): 10,70,10
+Build orientation (vertical/horizontal, default: vertical): vertical
+
+Processing image: ./myimage.jpg
+Grid size: 30x30
+Build position: 10,70,10
+Orientation: vertical
+
+Sending to Claude for analysis...
+Blocks data saved to: ./outputs/myimage-blocks.json
+Visualization saved to: ./outputs/myimage-visualization.txt
+
+Start building in Minecraft? (y/n): y
+
+Starting build process...
+Build completed!
+
+Process another image? (y/n): n
+Goodbye!
+```
+
+## How It Works
+
+1. You provide an image file path through the CLI
+2. The image is sent directly to Claude AI with a prompt to:
+   - Pixelize the image to the specified grid size
+   - Determine the best matching Minecraft block for each pixel
+   - Return a 2D array of block names
+3. The Mineflayer bot connects to the Minecraft server
+4. The bot places blocks in the specified location to recreate the image in-game
+
+The system has a fallback mechanism using Sharp for image processing if Claude is unavailable.
 
 ## Configuration
-
-### Minecraft Bot Settings
 
 You can configure the Minecraft bot by modifying the environment variables:
 
@@ -70,26 +127,6 @@ You can configure the Minecraft bot by modifying the environment variables:
 - `MC_PORT`: The Minecraft server port (default: 25565)
 - `MC_USERNAME`: The bot's username (default: PixelArtBot)
 - `MC_VERSION`: The Minecraft version (default: 1.19.2)
-
-### Image Processing
-
-You can modify the image processing parameters in `src/imageProcessor.js`:
-
-- Image size (default: 50x50 pixels)
-- Processing options
-
-### Claude API
-
-If you have a Claude API key, the application will use Claude to determine the best Minecraft blocks for each pixel. Otherwise, it will use a fallback algorithm.
-
-## How It Works
-
-1. The user uploads an image to the web server
-2. The image is resized to 50x50 pixels using Sharp
-3. The pixel RGB values are extracted
-4. Claude API (or the fallback algorithm) determines the best Minecraft blocks
-5. The Mineflayer bot connects to the Minecraft server
-6. The bot places blocks to recreate the image in-game
 
 ## License
 

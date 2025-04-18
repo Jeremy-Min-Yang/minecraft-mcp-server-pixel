@@ -1,32 +1,32 @@
 {
   "name": "minecraft-image-builder",
   "version": "1.0.0",
-  "description": "A Node.js application that converts uploaded images into Minecraft pixel art using a Mineflayer bot",
+  "description": "A CLI tool that uses Claude AI to convert images into Minecraft pixel art and build them in-game using a Mineflayer bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/cli.js",
+    "build": "node src/cli.js"
+  },
+  "bin": {
+    "minecraft-image-builder": "./src/cli.js"
   },
   "keywords": [
     "minecraft",
     "pixel-art",
     "mineflayer",
     "image-processing",
-    "claude-api"
+    "claude-api",
+    "cli"
   ],
   "author": "",
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "axios": "^1.8.4",
-    "express": "^5.1.0",
     "mineflayer": "^4.27.0",
-    "multer": "^1.4.5-lts.2",
     "sharp": "^0.34.1"
   },
   "devDependencies": {
-    "dotenv": "^16.5.0",
-    "nodemon": "^3.1.9"
+    "dotenv": "^16.5.0"
   }
 }

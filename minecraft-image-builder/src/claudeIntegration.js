@@ -1,31 +1,37 @@
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 /**
- * Convert RGB pixel data to Minecraft block types using Claude API
- * @param {Array} pixelGrid - 2D array of RGB values
+ * Send image to Claude for pixelization and block mapping
+ * @param {string} imagePath - Path to the uploaded image
+ * @param {number} gridSize - Size of the pixel grid (default: 50)
  * @returns {Promise<Array>} - 2D array of Minecraft block types
  */
-async function convertPixelsToBlocks(pixelGrid) {
+async function processImageWithClaude(imagePath, gridSize = 50) {
   try {
     const CLAUDE_API_KEY = process.env.CLAUDE_API_KEY;
     if (!CLAUDE_API_KEY) {
       throw new Error('Claude API key not found. Please set the CLAUDE_API_KEY environment variable.');
     }
 
-    // Convert the pixel grid to a simple string format for the prompt
-    const gridData = JSON.stringify(pixelGrid);
+    // Read the image as base64
+    const imageBuffer = await fs.promises.readFile(imagePath);
+    const base64Image = imageBuffer.toString('base64');
+    const mimeType = path.extname(imagePath).toLowerCase() === '.png' ? 'image/png' : 'image/jpeg';
 
     // Create the prompt for Claude
     const prompt = `
-    Here is a ${pixelGrid.length}x${pixelGrid[0].length} grid of RGB colors represented as an array of arrays. 
-    Each element is an object with r, g, b values from 0-255:
+    I'm sending you an image that I want to convert into a Minecraft pixel art.
     
-    ${gridData}
+    1. First, pixelize this image to a ${gridSize}x${gridSize} grid.
+    2. For each pixel, determine the best matching Minecraft block (using only wool, concrete, or terracotta).
+    3. Return a 2D array in JSON format where each element is a string with the block name.
     
-    For each pixel in this grid, suggest the best matching Minecraft block (using only wool, concrete, or terracotta).
-    Output ONLY a 2D array in JSON format where each element is a string with the block name.
-    For example: [["red_wool", "blue_concrete", ...], [...], ...].
-    Use only valid Minecraft block names with no additional explanation.
+    For example: [["red_wool", "blue_concrete", ...], [...], ...]
+    
+    Use only valid Minecraft block names. Focus on accuracy of color matching.
+    Please ONLY return the JSON array and nothing else.
     `;
 
     // Call Claude API
@@ -35,7 +41,20 @@ async function convertPixelsToBlocks(pixelGrid) {
       messages: [
         {
           role: 'user',
-          content: prompt
+          content: [
+            {
+              type: 'text',
+              text: prompt
+            },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: mimeType,
+                data: base64Image
+              }
+            }
+          ]
         }
       ]
     }, {
@@ -50,7 +69,6 @@ async function convertPixelsToBlocks(pixelGrid) {
     const content = response.data.content[0].text;
     
     // Parse the JSON array from the response
-    // Extract just the JSON array part of the response
     const jsonMatch = content.match(/\[\s*\[.*\]\s*\]/s);
     
     if (!jsonMatch) {
@@ -60,23 +78,40 @@ async function convertPixelsToBlocks(pixelGrid) {
     const blocksGrid = JSON.parse(jsonMatch[0]);
     
     // Validate the response
-    if (!Array.isArray(blocksGrid) || 
-        blocksGrid.length !== pixelGrid.length || 
-        !blocksGrid.every(row => Array.isArray(row) && row.length === pixelGrid[0].length)) {
+    if (!Array.isArray(blocksGrid) || !blocksGrid.every(row => Array.isArray(row))) {
       throw new Error('Claude returned an invalid blocks grid format');
     }
     
     return blocksGrid;
   } catch (error) {
-    console.error('Error converting pixels to blocks with Claude:', error);
+    console.error('Error processing image with Claude:', error);
     
-    // Fallback: use a simple algorithm to map RGB to blocks
-    return fallbackRgbToBlocks(pixelGrid);
+    // If Claude processing fails, use the fallback method
+    return fallbackProcessImage(imagePath, gridSize);
   }
 }
 
 /**
- * Fallback function to convert RGB values to Minecraft blocks without using Claude
+ * Fallback function to process and convert image without using Claude
+ * @param {string} imagePath - Path to the uploaded image
+ * @param {number} gridSize - Size of the pixel grid
+ * @returns {Promise<Array>} - 2D array of Minecraft block types
+ */
+async function fallbackProcessImage(imagePath, gridSize) {
+  console.log('Using fallback image processing method...');
+  
+  // Import local image processor here to avoid circular dependencies
+  const { processImage } = require('./imageProcessor');
+  
+  // Process the image to get pixel data
+  const pixelData = await processImage(imagePath, gridSize);
+  
+  // Convert pixels to blocks using the local algorithm
+  return fallbackRgbToBlocks(pixelData.grid);
+}
+
+/**
+ * Fallback function to convert RGB values to Minecraft blocks
  * @param {Array} pixelGrid - 2D array of RGB values
  * @returns {Array} - 2D array of Minecraft block types
  */
@@ -131,5 +166,6 @@ function fallbackRgbToBlocks(pixelGrid) {
 }
 
 module.exports = {
-  convertPixelsToBlocks
+  processImageWithClaude,
+  fallbackRgbToBlocks
 }; 

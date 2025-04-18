@@ -13,6 +13,10 @@ npm-debug.log*
 uploads/*
 !uploads/.gitkeep
 
+# Output files
+outputs/*
+!outputs/.gitkeep
+
 # Runtime data
 pids
 *.pid
