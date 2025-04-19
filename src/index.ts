@@ -1,3 +1,7 @@
+// Redirect all console logs to stderr to avoid breaking JSON-RPC on stdout
+console.log = (...args) => process.stderr.write(args.join(' ') + '\n');
+console.error = (...args) => process.stderr.write(args.join(' ') + '\n');
+
 // If you see a module not found error, run: npm install mineflayer
 import mineflayer from 'mineflayer';
 import type { Vec3 as Vec3Type } from 'vec3';
@@ -9,7 +13,7 @@ console.log('Starting Minecraft MCP server...');
 const bot = mineflayer.createBot({
   host: 'localhost', // Minecraft server address
   port: 25565,       // Default LAN port
-  username: 'ClaudeBot', // Bot username
+  username: 'Pixelator', // Bot username
   version: '1.20.2', // Minecraft version
 });
 
@@ -51,15 +55,29 @@ process.stdin.on('data', (chunk) => {
     if (line.trim() === '') continue;
     try {
       const command = JSON.parse(line);
+      console.error('Received command:', JSON.stringify(command));
       handleMcpCommand(command);
     } catch (err) {
-      sendMcpResponse({ error: 'Invalid JSON received', details: err instanceof Error ? err.message : String(err) });
+      // No id available, so send a generic error
+      sendMcpError(null, 'Invalid JSON received: ' + (err instanceof Error ? err.message : String(err)));
     }
   }
 });
 
-function sendMcpResponse(response: any) {
-  process.stdout.write(JSON.stringify(response) + '\n');
+function sendMcpResponse(id: any, result: any) {
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id,
+    result
+  }) + '\n');
+}
+
+function sendMcpError(id: any, message: string, code: number = -32000) {
+  process.stdout.write(JSON.stringify({
+    jsonrpc: '2.0',
+    id,
+    error: { code, message }
+  }) + '\n');
 }
 
 /**
@@ -69,33 +87,69 @@ function sendMcpResponse(response: any) {
  *   pixelArt: string[][], // 2D array of block names (e.g. 'minecraft:wool')
  *   width: number,        // width in blocks
  *   height: number        // height in blocks
+ *   id: any               // JSON-RPC id
  * }
  */
 async function handleMcpCommand(command: any) {
-  if (command.type === 'build-pixel-art') {
+  const id = command.id;
+
+  if (command.method === 'initialize') {
+    sendMcpResponse(id, { capabilities: {} });
+    return;
+  }
+
+  if (command.method === 'getManifest') {
+    sendMcpResponse(id, {
+      name: "Minecraft Pixel Art MCP Server",
+      description: "Builds pixel art in Minecraft using Mineflayer.",
+      version: "1.0.0"
+    });
+    return;
+  }
+
+  if (command.method === 'getCommands') {
+    sendMcpResponse(id, {
+      commands: [
+        {
+          name: "build-pixel-art",
+          description: "Builds pixel art in the Minecraft world.",
+          params: [
+            { name: "pixelArt", type: "string[][]" },
+            { name: "width", type: "number" },
+            { name: "height", type: "number" }
+          ]
+        }
+      ]
+    });
+    return;
+  }
+
+  if (command.type === 'build-pixel-art' || command.method === 'build-pixel-art') {
     const { pixelArt, width, height } = command;
     if (!Array.isArray(pixelArt) || typeof width !== 'number' || typeof height !== 'number') {
-      sendMcpResponse({ error: 'Invalid build-pixel-art command structure' });
+      sendMcpError(id, 'Invalid build-pixel-art command structure');
       return;
     }
-    sendMcpResponse({ status: 'searching', message: 'Searching for a clear area to build pixel art...' });
+    sendMcpResponse(id, { status: 'searching', message: 'Searching for a clear area to build pixel art...' });
     try {
       const area = await findClearArea(width, height);
       if (!area) {
-        sendMcpResponse({ error: 'No clear area found for pixel art of size ' + width + 'x' + height });
+        sendMcpError(id, 'No clear area found for pixel art of size ' + width + 'x' + height);
         return;
       }
-      sendMcpResponse({ status: 'ready', message: `Found clear area at (${area.x}, ${area.y}, ${area.z}). Moving to build location...` });
+      sendMcpResponse(id, { status: 'ready', message: `Found clear area at (${area.x}, ${area.y}, ${area.z}). Moving to build location...` });
       await moveToArea(area.x, area.y, area.z);
-      sendMcpResponse({ status: 'start', message: 'Starting pixel art build...' });
+      sendMcpResponse(id, { status: 'start', message: 'Starting pixel art build...' });
       await buildPixelArt(area.x, area.y, area.z, pixelArt, width, height);
-      sendMcpResponse({ status: 'done', message: 'Pixel art build complete!' });
+      sendMcpResponse(id, { status: 'done', message: 'Pixel art build complete!' });
     } catch (err) {
-      sendMcpResponse({ error: 'Error during build process', details: err instanceof Error ? err.message : String(err) });
+      sendMcpError(id, 'Error during build process: ' + (err instanceof Error ? err.message : String(err)));
     }
-  } else {
-    sendMcpResponse({ error: 'Unknown command type', type: command.type });
+    return;
   }
+
+  // Unknown method/type
+  sendMcpError(id, 'Unknown method or command type');
 }
 
 /**
@@ -205,3 +259,10 @@ async function placeBlockAt(x: number, y: number, z: number, blockName: string):
 }
 
 // TODO: Set up MCP server interface to receive commands from Claude 
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
+}); 
