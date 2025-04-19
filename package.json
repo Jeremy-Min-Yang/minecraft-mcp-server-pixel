@@ -1,0 +1,18 @@
+{
+  "name": "minecraft-mcp-server",
+  "version": "1.0.0",
+  "description": "A Minecraft MCP server that connects Claude and Mineflayer for pixel art building.",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "mineflayer": "^4.27.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0"
+  }
+}
