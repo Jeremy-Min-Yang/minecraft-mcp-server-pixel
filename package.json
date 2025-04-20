@@ -4,8 +4,9 @@
   "description": "A Minecraft MCP server that connects Claude and Mineflayer for pixel art building.",
   "main": "dist/index.js",
   "scripts": {
+    "build": "tsc",
     "start": "ts-node src/index.ts",
-    "build": "tsc"
+    "start:js": "node dist/index.js"
   },
   "dependencies": {
     "minecraft-data": "^3.85.0",
