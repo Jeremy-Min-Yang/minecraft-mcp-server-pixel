@@ -27,9 +27,10 @@ for (let i = 0; i < args.length; i++) {
 }
 
 console.log('Starting Minecraft MCP server...');
+console.error('[MCP INFO] MCP Server starting up, ready to accept connections from Claude...');
 
 // Get connection details from command line or use defaults
-const host = options.host || 'localhost';
+const host = process.env.HOST || options.host || 'localhost';
 const port = parseInt(options.port || '56756', 10);
 const username = options.username || 'Pixelator';
 const version = options.version || '1.20.2';
@@ -44,9 +45,11 @@ let stdinTimeout = null;
 setupStdinHandler();
 
 // Prevent process exit
-const KEEP_ALIVE_INTERVAL = 30000; // 30 seconds
+const KEEP_ALIVE_INTERVAL = 5000; // 5 seconds
 const neverEndingInterval = setInterval(() => {
   console.error('[MCP DEBUG] Process keep-alive ping');
+  // Send a keep-alive notification to Claude to maintain connection
+  sendMcpNotification('server/keepalive', { timestamp: Date.now() });
 }, KEEP_ALIVE_INTERVAL);
 
 // Make sure this interval is not preventing the process from exiting
@@ -67,6 +70,7 @@ function createBot() {
   
   connectionAttempts++;
   console.error(`[MCP INFO] Connection attempt ${connectionAttempts}/${maxConnectionAttempts}`);
+  console.error(`[MCP DEBUG] Attempting to connect to ${host}:${port} with username ${username} and version ${version}`);
   
   try {
     bot = mineflayer.createBot({
@@ -83,6 +87,7 @@ function createBot() {
       closeTimeout: 240 * 1000, // Wait 4 minutes before timing out connecting
     });
     
+    console.error('[MCP DEBUG] Bot creation successful, setting up event handlers');
     // Set up initial event handlers
     setupBotEvents();
   } catch (err) {
@@ -400,8 +405,8 @@ function setupStdinHandler() {
 
   // Set a timeout to detect if no input is received
   stdinTimeout = setTimeout(() => {
-    console.error('[MCP WARNING] No stdin input received after 60 seconds. This may indicate a communication issue with Claude.');
-  }, 60000);
+    console.error('[MCP WARNING] No stdin input received after 5 minutes. This may indicate a communication issue with Claude.');
+  }, 300000);
 
   process.stdin.on('data', (chunk) => {
     // Clear timeout on first data received
@@ -410,7 +415,7 @@ function setupStdinHandler() {
       stdinTimeout = null;
     }
     
-    console.error(`[MCP DEBUG] Received stdin chunk: ${chunk.length} bytes`);
+    console.error(`[MCP DEBUG] Received stdin chunk: ${chunk.length} bytes, content: ${chunk.toString().trim()}`);
     buffer += chunk;
     let boundary;
     while ((boundary = buffer.indexOf('\n')) >= 0) {
@@ -575,10 +580,12 @@ async function placeBlockAt(x, y, z, blockName) {
 
 process.on('uncaughtException', (err) => {
   console.error('[MCP CRITICAL] Uncaught Exception:', err);
+  // Prevent process exit by not calling process.exit()
 });
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('[MCP CRITICAL] Unhandled Rejection:', reason);
+  // Prevent process exit by not calling process.exit()
 });
 
 // Catch SIGINT and SIGTERM to gracefully exit
@@ -592,6 +599,11 @@ process.on('SIGTERM', () => {
   console.error('[MCP INFO] Received SIGTERM, shutting down...');
   if (bot) bot.quit();
   // Do NOT exit process - it will exit naturally when stdin/stdout close
+});
+
+// Add handler for beforeExit to log when process is about to exit
+process.on('beforeExit', (code) => {
+  console.error(`[MCP CRITICAL] Process is about to exit with code: ${code}`);
 });
 
 // Start the bot connection
