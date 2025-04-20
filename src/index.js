@@ -608,3 +608,55 @@ process.on('beforeExit', (code) => {
 
 // Start the bot connection
 createBot();
+
+// --- HTTP server for Render/Cloud hosting ---
+const express = require('express');
+const bodyParser = require('body-parser');
+
+const app = express();
+const httpPort = process.env.PORT || 3000;
+app.use(bodyParser.json());
+
+// POST /mcp endpoint for JSON-RPC-like requests
+app.post('/mcp', async (req, res) => {
+  const command = req.body;
+  if (!command || typeof command !== 'object') {
+    return res.status(400).json({ error: 'Invalid request body' });
+  }
+  try {
+    // Reuse the handleMcpCommand logic, but adapt to HTTP
+    let resultSent = false;
+    // Patch sendMcpResponse/sendMcpError to send HTTP response
+    const originalSendMcpResponse = sendMcpResponse;
+    const originalSendMcpError = sendMcpError;
+    sendMcpResponse = (id, result) => {
+      if (!resultSent) {
+        resultSent = true;
+        res.json({ jsonrpc: '2.0', id, result });
+      }
+    };
+    sendMcpError = (id, message, code = -32000) => {
+      if (!resultSent) {
+        resultSent = true;
+        res.status(400).json({ jsonrpc: '2.0', id, error: { code, message } });
+      }
+    };
+    await handleMcpCommand(command);
+    // Restore originals
+    sendMcpResponse = originalSendMcpResponse;
+    sendMcpError = originalSendMcpError;
+    if (!resultSent) {
+      res.status(204).end();
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Internal server error', details: err.message });
+  }
+});
+
+app.get('/', (req, res) => {
+  res.send('Minecraft MCP HTTP server is running.');
+});
+
+app.listen(httpPort, () => {
+  console.error(`[MCP HTTP] Listening on port ${httpPort}`);
+});
