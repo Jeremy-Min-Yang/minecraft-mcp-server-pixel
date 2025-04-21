@@ -1,0 +1,47 @@
+{
+  "name": "minecraftbuildmcp",
+  "version": "1.0.0",
+  "description": "A Model Context Protocol server for controlling a Minecraft bot with Claude.",
+  "author": "Jeremy Yang",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Jeremy-Min-Yang/minecraft-mcp-server-pixel"
+  },
+  "homepage": "https://github.com/Jeremy-Min-Yang/minecraft-mcp-server-pixel",
+  "bugs": {
+    "url": "https://github.com/Jeremy-Min-Yang/minecraft-mcp-server-pixel/issues"
+  },
+  "main": "dist/bot.js",
+  "type": "module",
+  "bin": {
+    "minecraftbuildmcp": "dist/bot.js"
+  },
+  "scripts": {
+    "prepare": "npm run build",
+    "build": "tsc",
+    "start": "node dist/bot.js",
+    "lint": "eslint \"src/**/*.ts\" --max-warnings=100",
+    "lint:fix": "eslint \"src/**/*.ts\" --fix"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.9.0",
+    "minecraft-data": "^3.85.0",
+    "mineflayer": "^4.27.0",
+    "mineflayer-pathfinder": "^2.4.2",
+    "vec3": "^0.1.8",
+    "yargs": "^17.7.2",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.1",
+    "@types/vec3": "^0.1.4",
+    "@types/yargs": "^17.0.33",
+    "@typescript-eslint/eslint-plugin": "^8.29.1",
+    "@typescript-eslint/parser": "^8.29.1",
+    "eslint": "^9.24.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+} 
