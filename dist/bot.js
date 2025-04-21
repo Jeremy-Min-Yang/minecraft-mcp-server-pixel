@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+console.error("=== minecraftbuildmcp starting ===");
 import pathfinderPkg from 'mineflayer-pathfinder';
 const { pathfinder, Movements, goals } = pathfinderPkg;
 import yargs from 'yargs';
