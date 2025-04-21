@@ -1,26 +1,40 @@
-# Minecraft MCP Server (Replica: minecraftbuildmcp)
+# MinecraftBuildMCP
 
-> ⚠️ **IMPORTANT COMPATIBILITY WARNING**: As of March 25, 2025, Minecraft 1.21.5 was just released. This bot is currently **NOT compatible** with Minecraft 1.21.5. Please use Minecraft 1.21.4 until we release an update with 1.21.5 support.
+MinecraftBuildMCP is a Model Context Protocol (MCP) server that lets Claude (or other LLMs) control a Minecraft bot using the Mineflayer API. This project allows you to automate and interact with Minecraft through Claude Desktop.
 
-A Minecraft bot powered by large language models and [Mineflayer API](https://github.com/PrismarineJS/mineflayer). This bot uses the [Model Context Protocol](https://github.com/modelcontextprotocol) (MCP) to enable Claude and other supported models to control a Minecraft character.
+---
 
-## Prerequisites
+## How to Run
 
-- Node.js
-- A running Minecraft game (tested with Minecraft 1.21.4 Java Edition)
-- Claude Desktop
+1. **Clone the repository and install dependencies:**
+   ```sh
+   git clone https://github.com/Jeremy-Min-Yang/minecraft-mcp-server-pixel.git
+   cd minecraft-mcp-server-pixel
+   npm install
+   ```
 
-## Getting started
+2. **Build the project:**
+   ```sh
+   npm run build
+   ```
 
-This bot is designed to be used with Claude Desktop through the Model Context Protocol (MCP).
+3. **Start Minecraft and open a world to LAN.**
 
-### Run Minecraft
+4. **Run the bot locally:**
+   ```sh
+   node dist/bot.js --host localhost --port 25565 --username Bob_the_Builder
+   ```
 
-Create a singleplayer world and open it to LAN (`ESC -> Open to LAN`). Bot will try to connect using port `25565` and hostname `localhost`. These parameters could be configured in `claude_desktop_config.json` on a next step.
+   Or, run directly from GitHub using npx:
+   ```sh
+   npx -y github:Jeremy-Min-Yang/minecraft-mcp-server-pixel --host localhost --port 25565 --username Bob_the_Builder
+   ```
 
-### MCP Configuration
+---
 
-Make sure that [Claude Desktop](https://claude.ai/download) is installed. Open `File -> Settings -> Developer -> Edit Config`. It should open installation directory. Find file with a name `claude_desktop_config.json` and insert the following code:
+## Claude Desktop Config Example
+
+Add this to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -29,63 +43,38 @@ Make sure that [Claude Desktop](https://claude.ai/download) is installed. Open `
       "command": "npx",
       "args": [
         "-y",
-        "github:yuniko-software/minecraft-mcp-server",
+        "github:Jeremy-Min-Yang/minecraft-mcp-server-pixel",
         "--host",
         "localhost",
         "--port",
         "25565",
         "--username",
-        "ClaudeBot"
+        "Bob_the_Builder"
       ]
     }
   }
 }
 ```
 
-Double-check that right `--port` and `--host` parameters were used. Make sure to completely reboot the Claude Desktop application (should be closed in OS tray).
-
-## Running
-
-Make sure Minecraft game is running and the world is opened to LAN. Then start Claude Desktop application and the bot should join the game.
-
-It could take some time for Claude Desktop to boot the MCP server. The marker that the server has booted successfully is a hammer icon that appears next to the chat.
-
-You can give bot any commands through any active Claude Desktop chat. You can also upload images of buildings and ask bot to build them 😁
-
-Don't forget to mention that bot should do something in Minecraft in your prompt. Because saying this is a trigger to run MCP server. It will ask for your permissions.
-
-Using Claude 3.7 Sonnet could give you some interesting results. The bot-agent would be really smart 🫡
+---
 
 ## Available Commands
 
-Once connected to a Minecraft server, Claude can use these commands:
+Once connected, Claude can use these commands:
 
 ### Movement
-- `get-position` - Get the current position of the bot
-- `move-to-position` - Move to specific coordinates
-- `look-at` - Make the bot look at specific coordinates
-- `jump` - Make the bot jump
-- `move-in-direction` - Move in a specific direction for a duration
+- `get-position` — Get the bot's current position
+- `move-to-position` — Move to specific coordinates
 
 ### Inventory
-- `list-inventory` - List all items in the bot's inventory
-- `find-item` - Find a specific item in inventory
-- `equip-item` - Equip a specific item
+- `equip-item` — Equip an item
 
 ### Block Interaction
-- `place-block` - Place a block at specified coordinates
-- `dig-block` - Dig a block at specified coordinates
-- `get-block-info` - Get information about a block
-- `find-block` - Find the nearest block of a specific type
+- `place-block` — Place a block at coordinates
 
-### Entity Interaction
-- `find-entity` - Find the nearest entity of a specific type
+### Pixel Art
+- `build-pixel-art` — Build a pixel art image from a 2D array of block types
 
-### Communication
-- `send-chat` - Send a chat message in-game
+---
 
-## Contributing
-
-This application is a replica of yukinomcp. All refactoring commits, functional and test contributions, issues and discussion are greatly appreciated!
-
-Feel free to submit pull requests or open issues for improvements. 
+You can now control your Minecraft bot with Claude using MinecraftBuildMCP. 

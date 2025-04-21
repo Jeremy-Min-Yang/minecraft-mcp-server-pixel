@@ -143,6 +143,7 @@ function createMcpServer(bot: any) {
   registerBlockTools(server, bot);
   registerEntityTools(server, bot);
   registerChatTools(server, bot);
+  registerPixelArtTool(server, bot);
   
   return server;
 }
@@ -162,7 +163,6 @@ function registerPositionTools(server: McpServer, bot: any) {
           y: Math.floor(position.y),
           z: Math.floor(position.z)
         };
-        
         return createResponse(`Current position: (${pos.x}, ${pos.y}, ${pos.z})`);
       } catch (error) {
         return createErrorResponse(error as Error);
@@ -183,70 +183,10 @@ function registerPositionTools(server: McpServer, bot: any) {
       try {
         const goal = new goals.GoalNear(x, y, z, range);
         await bot.pathfinder.goto(goal);
-        
         return createResponse(`Successfully moved to position near (${x}, ${y}, ${z})`);
       } catch (error) {
         return createErrorResponse(error as Error);
       }
-    }
-  );
-
-  server.tool(
-    "look-at",
-    "Make the bot look at a specific position",
-    {
-      x: z.number().describe("X coordinate"),
-      y: z.number().describe("Y coordinate"),
-      z: z.number().describe("Z coordinate"),
-    },
-    async ({ x, y, z }): Promise<McpResponse> => {
-      try {
-        await bot.lookAt(new Vec3(x, y, z), true);
-        
-        return createResponse(`Looking at position (${x}, ${y}, ${z})`);
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "jump",
-    "Make the bot jump",
-    {},
-    async (): Promise<McpResponse> => {
-      try {
-        bot.setControlState('jump', true);
-        setTimeout(() => bot.setControlState('jump', false), 250);
-        
-        return createResponse("Successfully jumped");
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "move-in-direction",
-    "Move the bot in a specific direction for a duration",
-    {
-      direction: z.enum(['forward', 'back', 'left', 'right']).describe("Direction to move"),
-      duration: z.number().optional().describe("Duration in milliseconds (default: 1000)")
-    },
-    async ({ direction, duration = 1000 }: { direction: Direction, duration?: number }): Promise<McpResponse> => {
-      return new Promise((resolve) => {
-        try {
-          bot.setControlState(direction, true);
-          
-          setTimeout(() => {
-            bot.setControlState(direction, false);
-            resolve(createResponse(`Moved ${direction} for ${duration}ms`));
-          }, duration);
-        } catch (error) {
-          bot.setControlState(direction, false);
-          resolve(createErrorResponse(error as Error));
-        }
-      });
     }
   );
 }
@@ -254,59 +194,6 @@ function registerPositionTools(server: McpServer, bot: any) {
 // ========== Inventory Management Tools ==========
 
 function registerInventoryTools(server: McpServer, bot: any) {
-  server.tool(
-    "list-inventory",
-    "List all items in the bot's inventory",
-    {},
-    async (): Promise<McpResponse> => {
-      try {
-        const items = bot.inventory.items();
-        const itemList: InventoryItem[] = items.map((item: any) => ({
-          name: item.name,
-          count: item.count,
-          slot: item.slot
-        }));
-        
-        if (items.length === 0) {
-          return createResponse("Inventory is empty");
-        }
-        
-        let inventoryText = `Found ${items.length} items in inventory:\n\n`;
-        itemList.forEach(item => {
-          inventoryText += `- ${item.name} (x${item.count}) in slot ${item.slot}\n`;
-        });
-        
-        return createResponse(inventoryText);
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "find-item",
-    "Find a specific item in the bot's inventory",
-    {
-      nameOrType: z.string().describe("Name or type of item to find")
-    },
-    async ({ nameOrType }): Promise<McpResponse> => {
-      try {
-        const items = bot.inventory.items();
-        const item = items.find((item: any) => 
-          item.name.includes(nameOrType.toLowerCase())
-        );
-        
-        if (item) {
-          return createResponse(`Found ${item.count} ${item.name} in inventory (slot ${item.slot})`);
-        } else {
-          return createResponse(`Couldn't find any item matching '${nameOrType}' in inventory`);
-        }
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
   server.tool(
     "equip-item",
     "Equip a specific item",
@@ -320,11 +207,9 @@ function registerInventoryTools(server: McpServer, bot: any) {
         const item = items.find((item: any) => 
           item.name.includes(itemName.toLowerCase())
         );
-        
         if (!item) {
           return createResponse(`Couldn't find any item matching '${itemName}' in inventory`);
         }
-        
         await bot.equip(item, destination as mineflayer.EquipmentDestination);
         return createResponse(`Equipped ${item.name} to ${destination}`);
       } catch (error) {
@@ -353,7 +238,6 @@ function registerBlockTools(server: McpServer, bot: any) {
         if (blockAtPos && blockAtPos.name !== 'air') {
           return createResponse(`There's already a block (${blockAtPos.name}) at (${x}, ${y}, ${z})`);
         }
-        
         const possibleFaces: FaceOption[] = [
           { direction: 'down', vector: new Vec3(0, -1, 0) },
           { direction: 'north', vector: new Vec3(0, 0, -1) },
@@ -362,29 +246,21 @@ function registerBlockTools(server: McpServer, bot: any) {
           { direction: 'west', vector: new Vec3(-1, 0, 0) },
           { direction: 'up', vector: new Vec3(0, 1, 0) }
         ];
-        
-        // Prioritize the requested face direction
         if (faceDirection !== 'down') {
           const specificFace = possibleFaces.find(face => face.direction === faceDirection);
           if (specificFace) {
             possibleFaces.unshift(possibleFaces.splice(possibleFaces.indexOf(specificFace), 1)[0]);
           }
         }
-        
-        // Try each potential face for placing
         for (const face of possibleFaces) {
           const referencePos = placePos.plus(face.vector);
           const referenceBlock = bot.blockAt(referencePos);
-          
           if (referenceBlock && referenceBlock.name !== 'air') {
             if (!bot.canSeeBlock(referenceBlock)) {
-              // Try to move closer to see the block
               const goal = new goals.GoalNear(referencePos.x, referencePos.y, referencePos.z, 2);
               await bot.pathfinder.goto(goal);
             }
-            
             await bot.lookAt(placePos, true);
-            
             try {
               await bot.placeBlock(referenceBlock, face.vector.scaled(-1));
               return createResponse(`Placed block at (${x}, ${y}, ${z}) using ${face.direction} face`);
@@ -394,98 +270,7 @@ function registerBlockTools(server: McpServer, bot: any) {
             }
           }
         }
-        
         return createResponse(`Failed to place block at (${x}, ${y}, ${z}): No suitable reference block found`);
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "dig-block",
-    "Dig a block at the specified position",
-    {
-      x: z.number().describe("X coordinate"),
-      y: z.number().describe("Y coordinate"),
-      z: z.number().describe("Z coordinate"),
-    },
-    async ({ x, y, z }): Promise<McpResponse> => {
-      try {
-        const blockPos = new Vec3(x, y, z);
-        const block = bot.blockAt(blockPos);
-        
-        if (!block || block.name === 'air') {
-          return createResponse(`No block found at position (${x}, ${y}, ${z})`);
-        }
-        
-        if (!bot.canDigBlock(block) || !bot.canSeeBlock(block)) {
-          // Try to move closer to dig the block
-          const goal = new goals.GoalNear(x, y, z, 2);
-          await bot.pathfinder.goto(goal);
-        }
-        
-        await bot.dig(block);
-        
-        return createResponse(`Dug ${block.name} at (${x}, ${y}, ${z})`);
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "get-block-info",
-    "Get information about a block at the specified position",
-    {
-      x: z.number().describe("X coordinate"),
-      y: z.number().describe("Y coordinate"),
-      z: z.number().describe("Z coordinate"),
-    },
-    async ({ x, y, z }): Promise<McpResponse> => {
-      try {
-        const blockPos = new Vec3(x, y, z);
-        const block = bot.blockAt(blockPos);
-        
-        if (!block) {
-          return createResponse(`No block information found at position (${x}, ${y}, ${z})`);
-        }
-        
-        return createResponse(`Found ${block.name} (type: ${block.type}) at position (${block.position.x}, ${block.position.y}, ${block.position.z})`);
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
-
-  server.tool(
-    "find-block",
-    "Find the nearest block of a specific type",
-    {
-      blockType: z.string().describe("Type of block to find"),
-      maxDistance: z.number().optional().describe("Maximum search distance (default: 16)")
-    },
-    async ({ blockType, maxDistance = 16 }): Promise<McpResponse> => {
-      try {
-        const mcData = minecraftData(bot.version);
-        const blocksByName = mcData.blocksByName;
-        
-        if (!blocksByName[blockType]) {
-          return createResponse(`Unknown block type: ${blockType}`);
-        }
-        
-        const blockId = blocksByName[blockType].id;
-        
-        const block = bot.findBlock({
-          matching: blockId,
-          maxDistance: maxDistance
-        });
-        
-        if (!block) {
-          return createResponse(`No ${blockType} found within ${maxDistance} blocks`);
-        }
-        
-        return createResponse(`Found ${blockType} at position (${block.position.x}, ${block.position.y}, ${block.position.z})`);
       } catch (error) {
         return createErrorResponse(error as Error);
       }
@@ -539,6 +324,83 @@ function registerChatTools(server: McpServer, bot: any) {
       try {
         bot.chat(message);
         return createResponse(`Sent message: "${message}"`);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+}
+
+// ========== Pixel Art Builder Tool ==========
+
+async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: number, z: number }) {
+  // Find the block in inventory
+  const item = bot.inventory.items().find((i: any) => i.name === blockType);
+  if (!item) {
+    bot.chat(`Missing block: ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+    return false;
+  }
+  // Equip the block
+  await bot.equip(item, 'hand');
+  // Find a block to place against (try below)
+  const referencePos = new Vec3(pos.x, pos.y - 1, pos.z);
+  const referenceBlock = bot.blockAt(referencePos);
+  if (!referenceBlock) {
+    bot.chat(`No reference block to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+    return false;
+  }
+  // Place the block
+  try {
+    await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
+    return true;
+  } catch (err) {
+    bot.chat(`Failed to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+    return false;
+  }
+}
+
+function registerPixelArtTool(server: McpServer, bot: any) {
+  server.tool(
+    "build-pixel-art",
+    "Build a pixel art image from a 2D array of block types",
+    {
+      pixels: z.array(z.array(z.string())).describe("2D array of block types"),
+      origin: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      }).describe("Origin position"),
+      direction: z.enum(["north", "south", "east", "west"]).default("north")
+    },
+    async ({ pixels, origin, direction }) => {
+      try {
+        await bot.pathfinder.goto(new goals.GoalNear(origin.x, origin.y, origin.z, 1));
+        bot.chat("Starting pixel art build!");
+        for (let row = 0; row < pixels.length; row++) {
+          for (let col = 0; col < pixels[row].length; col++) {
+            const blockType = pixels[row][col];
+            // Calculate world position based on direction
+            let x = origin.x, z = origin.z;
+            if (direction === "north") {
+              x += col;
+              z -= row;
+            } else if (direction === "south") {
+              x += col;
+              z += row;
+            } else if (direction === "east") {
+              x += row;
+              z += col;
+            } else if (direction === "west") {
+              x -= row;
+              z += col;
+            }
+            const y = origin.y;
+            await placeBlockAt(bot, blockType, { x, y, z });
+          }
+          bot.chat(`Finished row ${row + 1} of ${pixels.length}`);
+        }
+        bot.chat("Pixel art build complete!");
+        return createResponse("Pixel art build complete!");
       } catch (error) {
         return createErrorResponse(error as Error);
       }
