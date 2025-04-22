@@ -438,6 +438,16 @@ function registerChatTools(server: McpServer, bot: any) {
 
 // ========== Pixel Art Builder Tool ==========
 
+function countBlocksNeeded(pixels: string[][]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const row of pixels) {
+    for (const block of row) {
+      counts[block] = (counts[block] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
 async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: number, z: number }) {
   // Find the block in inventory
   const item = bot.inventory.items().find((i: any) => i.name === blockType);
@@ -497,6 +507,37 @@ function registerPixelArtTool(server: McpServer, bot: any) {
     },
     async ({ pixels, origin, direction }) => {
       try {
+        // === NEW: Gather all required blocks in creative ===
+        if (bot.game.gameMode === 1 && bot.creative) {
+          const blockCounts = countBlocksNeeded(pixels);
+          // Print out the block requirements for the user
+          const blockSummary = Object.entries(blockCounts)
+            .map(([block, count]) => `${block}: ${count}`)
+            .join(", ");
+          bot.chat(`Blocks needed for pixel art: ${blockSummary}`);
+          const mcData = minecraftData(bot.version);
+          let slot = 36; // Start at first hotbar slot
+          for (const [blockName, count] of Object.entries(blockCounts)) {
+            const item = mcData.itemsByName[blockName];
+            if (!item) {
+              bot.chat(`Unknown block type: ${blockName}`);
+              continue;
+            }
+            let toGive = count;
+            while (toGive > 0 && slot < 45) { // 36-44 is hotbar/main inventory
+              const giveCount = Math.min(64, toGive);
+              await bot.creative.setInventorySlot(slot, item.id, giveCount);
+              toGive -= giveCount;
+              slot++;
+            }
+            if (toGive > 0) {
+              bot.chat(`Not enough inventory slots for ${blockName}`);
+            }
+          }
+          // Wait for inventory update
+          await new Promise(res => setTimeout(res, 200));
+        }
+        // === END NEW ===
         await bot.pathfinder.goto(new goals.GoalNear(origin.x, origin.y, origin.z, 1));
         bot.chat("Starting pixel art build!");
         for (let row = 0; row < pixels.length; row++) {
@@ -518,6 +559,8 @@ function registerPixelArtTool(server: McpServer, bot: any) {
               z += col;
             }
             const y = origin.y;
+            // Ensure the block is in inventory and equipped
+            await ensureBlockInInventory(bot, blockType);
             await placeBlockAt(bot, blockType, { x, y, z });
           }
           bot.chat(`Finished row ${row + 1} of ${pixels.length}`);
