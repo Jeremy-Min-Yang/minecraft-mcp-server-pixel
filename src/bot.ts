@@ -109,6 +109,40 @@ async function ensureBlockInInventory(bot: any, blockName: string) {
   }
 }
 
+// ========== Block Placeability Helper ==========
+
+function isPlaceableFloor(block: any): boolean {
+  if (!block) return false;
+  // List of non-solid or non-placeable block names
+  const nonPlaceable = [
+    'air', 'cave_air', 'void_air', 'water', 'lava', 'tall_grass', 'grass', 'snow_layer',
+    'seagrass', 'kelp', 'vine', 'fire', 'torch', 'redstone_torch', 'tripwire', 'carpet',
+    'rail', 'powered_rail', 'detector_rail', 'activator_rail', 'button', 'lever', 'ladder',
+    'flower', 'poppy', 'dandelion', 'blue_orchid', 'allium', 'azure_bluet', 'red_tulip',
+    'orange_tulip', 'white_tulip', 'pink_tulip', 'oxeye_daisy', 'cornflower', 'lily_of_the_valley',
+    'wither_rose', 'sunflower', 'lilac', 'rose_bush', 'peony', 'dead_bush', 'fern', 'large_fern',
+    'mushroom', 'brown_mushroom', 'red_mushroom', 'sugar_cane', 'bamboo', 'sapling', 'wheat',
+    'carrots', 'potatoes', 'beetroots', 'melon_stem', 'pumpkin_stem', 'nether_wart', 'cactus',
+    'reeds', 'cocoa', 'chorus_flower', 'chorus_plant', 'scaffolding', 'bubble_column', 'sweet_berry_bush',
+    'torchflower', 'pitcher_crop', 'spore_blossom', 'dripleaf', 'small_dripleaf', 'big_dripleaf',
+    'amethyst_cluster', 'budding_amethyst', 'pointed_dripstone', 'hanging_roots', 'rooted_dirt',
+    'moss_carpet', 'glow_lichen', 'candle', 'campfire', 'soul_campfire', 'bell', 'lightning_rod',
+    'frogspawn', 'turtle_egg', 'sea_pickle', 'end_rod', 'snow', 'ice', 'blue_ice', 'packed_ice',
+    'slime_block', 'honey_block', 'barrier', 'structure_void', 'structure_block', 'command_block',
+    'repeating_command_block', 'chain_command_block', 'jigsaw', 'light', 'spawner', 'mob_spawner',
+    'shulker_box', 'moving_piston', 'piston_head', 'piston_extension', 'tripwire_hook', 'string',
+    'item_frame', 'glow_item_frame', 'painting', 'sign', 'wall_sign', 'standing_sign', 'banner',
+    'wall_banner', 'standing_banner', 'end_gateway', 'end_portal', 'end_portal_frame', 'nether_portal',
+    'portal', 'barrier', 'structure_void', 'structure_block', 'jigsaw', 'light', 'sculk_sensor',
+    'sculk_shrieker', 'sculk_catalyst', 'sculk_vein', 'sculk', 'powder_snow', 'bubble_column',
+    'tripwire', 'tripwire_hook', 'string', 'cobweb', 'web', 'dragon_egg', 'bed', 'monster_egg',
+    'infested_stone', 'infested_cobblestone', 'infested_stone_bricks', 'infested_mossy_stone_bricks',
+    'infested_cracked_stone_bricks', 'infested_chiseled_stone_bricks', 'infested_deepslate',
+    'barrier', 'structure_void', 'structure_block', 'jigsaw', 'light', 'air', 'cave_air', 'void_air'
+  ];
+  return !nonPlaceable.includes(block.name);
+}
+
 // ========== Bot Setup ==========
 
 function setupBot(argv: any) {
@@ -296,7 +330,7 @@ function registerBlockTools(server: McpServer, bot: any) {
         for (const face of possibleFaces) {
           const referencePos = placePos.plus(face.vector);
           const referenceBlock = bot.blockAt(referencePos);
-          if (referenceBlock && referenceBlock.name !== 'air') {
+          if (isPlaceableFloor(referenceBlock)) {
             if (!bot.canSeeBlock(referenceBlock)) {
               const goal = new goals.GoalNear(referencePos.x, referencePos.y, referencePos.z, 2);
               await bot.pathfinder.goto(goal);
@@ -386,8 +420,8 @@ async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: nu
   // Find a block to place against (try below)
   const referencePos = new Vec3(pos.x, pos.y - 1, pos.z);
   const referenceBlock = bot.blockAt(referencePos);
-  if (!referenceBlock) {
-    bot.chat(`No reference block to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+  if (!isPlaceableFloor(referenceBlock)) {
+    bot.chat(`No placeable floor to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
     return false;
   }
   // Place the block
