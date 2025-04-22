@@ -507,7 +507,6 @@ function registerPixelArtTool(server: McpServer, bot: any) {
     },
     async ({ pixels, origin, direction }) => {
       try {
-        // === NEW: Gather all required blocks in creative ===
         if (bot.game.gameMode === 1 && bot.creative) {
           // Clear inventory before starting build
           for (let slot = 0; slot < bot.inventory.slots.length; slot++) {
@@ -515,59 +514,59 @@ function registerPixelArtTool(server: McpServer, bot: any) {
               await bot.creative.setInventorySlot(slot, -1, 0);
             }
           }
-          const blockCounts = countBlocksNeeded(pixels);
-          // Print out the block requirements for the user
-          const blockSummary = Object.entries(blockCounts)
-            .map(([block, count]) => `${block}: ${count}`)
-            .join(", ");
-          bot.chat(`Blocks needed for pixel art: ${blockSummary}`);
-          const mcData = minecraftData(bot.version);
-          let slot = 36; // Start at first hotbar slot
-          for (const [blockName, count] of Object.entries(blockCounts)) {
-            const item = mcData.itemsByName[blockName];
-            if (!item) {
-              bot.chat(`Unknown block type: ${blockName}`);
-              continue;
-            }
-            let toGive = count;
-            while (toGive > 0 && slot < 45) { // 36-44 is hotbar/main inventory
-              const giveCount = Math.min(64, toGive);
-              await bot.creative.setInventorySlot(slot, item.id, giveCount);
-              toGive -= giveCount;
-              slot++;
-            }
-            if (toGive > 0) {
-              bot.chat(`Not enough inventory slots for ${blockName}`);
-            }
-          }
-          // Wait for inventory update
-          await new Promise(res => setTimeout(res, 200));
         }
-        // === END NEW ===
+        const blockCounts = countBlocksNeeded(pixels);
+        // Print out the block requirements for the user
+        const blockSummary = Object.entries(blockCounts)
+          .map(([block, count]) => `${block}: ${count}`)
+          .join(", ");
+        bot.chat(`Blocks needed for pixel art: ${blockSummary}`);
         await bot.pathfinder.goto(new goals.GoalNear(origin.x, origin.y, origin.z, 1));
         bot.chat("Starting pixel art build!");
         for (let row = 0; row < pixels.length; row++) {
           for (let col = 0; col < pixels[row].length; col++) {
             const blockType = pixels[row][col];
-            // Calculate world position based on direction
-            let x = origin.x, z = origin.z;
+            // Calculate world position based on direction, but build vertically (Y increases with row)
+            let x = origin.x, z = origin.z, y = origin.y + row;
             if (direction === "north") {
               x += col;
-              z -= row;
             } else if (direction === "south") {
               x += col;
-              z += row;
             } else if (direction === "east") {
-              x += row;
               z += col;
             } else if (direction === "west") {
-              x -= row;
               z += col;
             }
-            const y = origin.y;
             // Ensure the block is in inventory and equipped
             await ensureBlockInInventory(bot, blockType);
+            // Check for placeable block below
+            const belowPos = new Vec3(x, y - 1, z);
+            const belowBlock = bot.blockAt(belowPos);
+            if (!isPlaceableFloor(belowBlock)) {
+              bot.chat(`Cannot place ${blockType} at (${x}, ${y}, ${z}): no placeable block below.`);
+              continue;
+            }
+            // Move one block away from the target position before placing
+            const botPos = bot.entity.position;
+            let dx = x - Math.floor(botPos.x);
+            let dz = z - Math.floor(botPos.z);
+            // If already at the target, pick a direction to move away
+            if (dx === 0 && dz === 0) dz = 1;
+            // Normalize to one block away
+            if (Math.abs(dx) > Math.abs(dz)) {
+              dx = dx > 0 ? 1 : -1;
+              dz = 0;
+            } else {
+              dz = dz > 0 ? 1 : -1;
+              dx = 0;
+            }
+            const moveAwayPos = new Vec3(x + dx, y, z + dz);
+            await bot.pathfinder.goto(new goals.GoalNear(moveAwayPos.x, moveAwayPos.y, moveAwayPos.z, 0));
+            // Place the block
             await placeBlockAt(bot, blockType, { x, y, z });
+            // Move away again after placing (opposite direction)
+            const moveAwayPos2 = new Vec3(x - dx, y, z - dz);
+            await bot.pathfinder.goto(new goals.GoalNear(moveAwayPos2.x, moveAwayPos2.y, moveAwayPos2.z, 0));
           }
           bot.chat(`Finished row ${row + 1} of ${pixels.length}`);
         }
