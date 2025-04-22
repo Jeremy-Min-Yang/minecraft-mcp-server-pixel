@@ -496,15 +496,19 @@ function registerPixelArtTool(server: McpServer, bot: any) {
         for (let row = 0; row < pixels.length; row++) {
           for (let col = 0; col < pixels[row].length; col++) {
             const blockType = pixels[row][col];
-            // Calculate world position based on direction, but build vertically (Y increases with row)
-            let x = origin.x, z = origin.z, y = origin.y + row;
+            // Calculate world position based on direction, build horizontally (Y is constant)
+            let x = origin.x, z = origin.z, y = origin.y;
             if (direction === "north") {
               x += col;
+              z -= row;
             } else if (direction === "south") {
               x += col;
+              z += row;
             } else if (direction === "east") {
+              x += row;
               z += col;
             } else if (direction === "west") {
+              x -= row;
               z += col;
             }
             // Ensure the block is in inventory and equipped
