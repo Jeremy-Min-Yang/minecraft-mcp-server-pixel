@@ -263,6 +263,36 @@ function registerPositionTools(server: McpServer, bot: any) {
       }
     }
   );
+
+  // ====== FLY TO POSITION TOOL ======
+  server.tool(
+    "fly-to-position",
+    "Fly the bot to a specific position (only works in creative mode)",
+    {
+      x: z.number().describe("X coordinate"),
+      y: z.number().describe("Y coordinate"),
+      z: z.number().describe("Z coordinate")
+    },
+    async ({ x, y, z }): Promise<McpResponse> => {
+      try {
+        if (bot.game.gameMode === 1 && bot.creative) {
+          bot.entity.position.set(x, y, z);
+          bot.emit('move');
+          bot._client.write('position', {
+            x, y, z,
+            yaw: bot.entity.yaw,
+            pitch: bot.entity.pitch,
+            flags: 0x00
+          });
+          return createResponse(`Flew to (${x}, ${y}, ${z})`);
+        } else {
+          return createErrorResponse("Bot is not in creative mode and cannot fly.");
+        }
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
 }
 
 // ========== Inventory Management Tools ==========
@@ -423,6 +453,24 @@ async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: nu
   if (!isPlaceableFloor(referenceBlock)) {
     bot.chat(`No placeable floor to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
     return false;
+  }
+  // If the block is above the bot, fly up to it (creative mode only)
+  if (bot.game.gameMode === 1 && bot.creative) {
+    const botPos = bot.entity.position;
+    if (pos.y > botPos.y + 1 || pos.y < botPos.y - 2 || botPos.distanceTo(new Vec3(pos.x, botPos.y, pos.z)) > 4) {
+      // Move/fly close to the block position, but not inside the block
+      bot.entity.position.set(pos.x + 0.5, pos.y + 1.5, pos.z + 0.5);
+      bot.emit('move');
+      bot._client.write('position', {
+        x: pos.x + 0.5,
+        y: pos.y + 1.5,
+        z: pos.z + 0.5,
+        yaw: bot.entity.yaw,
+        pitch: bot.entity.pitch,
+        flags: 0x00
+      });
+      await new Promise(res => setTimeout(res, 100));
+    }
   }
   // Place the block
   try {
