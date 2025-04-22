@@ -263,36 +263,6 @@ function registerPositionTools(server: McpServer, bot: any) {
       }
     }
   );
-
-  // ====== FLY TO POSITION TOOL ======
-  server.tool(
-    "fly-to-position",
-    "Fly the bot to a specific position (only works in creative mode)",
-    {
-      x: z.number().describe("X coordinate"),
-      y: z.number().describe("Y coordinate"),
-      z: z.number().describe("Z coordinate")
-    },
-    async ({ x, y, z }): Promise<McpResponse> => {
-      try {
-        if (bot.game.gameMode === 1 && bot.creative) {
-          bot.entity.position.set(x, y, z);
-          bot.emit('move');
-          bot._client.write('position', {
-            x, y, z,
-            yaw: bot.entity.yaw,
-            pitch: bot.entity.pitch,
-            flags: 0x00
-          });
-          return createResponse(`Flew to (${x}, ${y}, ${z})`);
-        } else {
-          return createErrorResponse("Bot is not in creative mode and cannot fly.");
-        }
-      } catch (error) {
-        return createErrorResponse(error as Error);
-      }
-    }
-  );
 }
 
 // ========== Inventory Management Tools ==========
