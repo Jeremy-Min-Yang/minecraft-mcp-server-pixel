@@ -88,7 +88,7 @@ function createErrorResponse(error: Error | string): McpResponse {
 async function ensureBlockInInventory(bot: any, blockName: string) {
   const mcData = minecraftData(bot.version);
   const item = mcData.itemsByName[blockName];
-  if (!item) throw new Error(`Unknown block: ${blockName}`);
+  if (!item) throw new Error(`Unknown block: ${blockName}. Use 'list-block-names' to see valid names.`);
 
   // Check if already in inventory
   const existing = bot.inventory.items().find((i: any) => i.name === blockName);
@@ -105,7 +105,7 @@ async function ensureBlockInInventory(bot: any, blockName: string) {
     await new Promise(res => setTimeout(res, 100));
     return bot.inventory.slots[emptySlot];
   } else {
-    throw new Error("Not in creative mode, cannot give block");
+    throw new Error("Not in creative mode or not OP. Make sure the bot is OP and in creative mode. Use 'get-bot-status' to check.");
   }
 }
 
@@ -283,10 +283,46 @@ function registerInventoryTools(server: McpServer, bot: any) {
           item = await ensureBlockInInventory(bot, itemName.toLowerCase());
         }
         if (!item) {
-          return createResponse(`Couldn't find or give any item matching '${itemName}'`);
+          return createResponse(`Couldn't find or give any item matching '${itemName}'. (Check block name, creative mode, and OP status)`);
         }
         await bot.equip(item, destination as mineflayer.EquipmentDestination);
         return createResponse(`Equipped ${item.name} to ${destination}`);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+
+  // Tool: Print bot's current game mode and OP status
+  server.tool(
+    "get-bot-status",
+    "Print the bot's current game mode and OP status",
+    {},
+    async (): Promise<McpResponse> => {
+      try {
+        const gm = bot.game && bot.game.gameMode;
+        const isCreative = (gm === 1);
+        // OP status is not directly available, but we can check if bot.creative exists
+        const isOp = !!bot.creative;
+        return createResponse(`Game mode: ${gm} (${isCreative ? 'creative' : 'not creative'}), OP: ${isOp ? 'yes' : 'no'}`);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+
+  // Tool: List all valid block names for this Minecraft version
+  server.tool(
+    "list-block-names",
+    "List all valid block names for the current Minecraft version",
+    {},
+    async (): Promise<McpResponse> => {
+      try {
+        const mcData = minecraftData(bot.version);
+        const blockNames = Object.keys(mcData.itemsByName).filter(name => mcData.itemsByName[name].stackSize === 64);
+        // Only show the first 100 for brevity
+        const preview = blockNames.slice(0, 100).join(", ");
+        return createResponse(`First 100 block names: ${preview} ... (total: ${blockNames.length})`);
       } catch (error) {
         return createErrorResponse(error as Error);
       }
