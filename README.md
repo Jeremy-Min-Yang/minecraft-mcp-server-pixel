@@ -19,6 +19,9 @@ MinecraftBuildMCP is a Model Context Protocol (MCP) server that lets Claude (or 
    ```
 
 3. **Start Minecraft and open a world to LAN.**
+  ```sh
+  Run Minecraft 1.21.4.
+  ```
 
 4. **Run the bot locally:**
    ```sh

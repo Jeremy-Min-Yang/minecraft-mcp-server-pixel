@@ -83,6 +83,32 @@ function createErrorResponse(error: Error | string): McpResponse {
   };
 }
 
+// ========== Creative Equip Helper ==========
+
+async function ensureBlockInInventory(bot: any, blockName: string) {
+  const mcData = minecraftData(bot.version);
+  const item = mcData.itemsByName[blockName];
+  if (!item) throw new Error(`Unknown block: ${blockName}`);
+
+  // Check if already in inventory
+  const existing = bot.inventory.items().find((i: any) => i.name === blockName);
+  if (existing) return existing;
+
+  // Find an empty slot
+  const emptySlot = bot.inventory.firstEmptyInventorySlot();
+  if (emptySlot === null) throw new Error("No empty inventory slot available");
+
+  // Use creative API to set the slot
+  if (bot.creative && bot.game.gameMode === 1) {
+    await bot.creative.setInventorySlot(emptySlot, item.id, 64);
+    // Wait for inventory update
+    await new Promise(res => setTimeout(res, 100));
+    return bot.inventory.slots[emptySlot];
+  } else {
+    throw new Error("Not in creative mode, cannot give block");
+  }
+}
+
 // ========== Bot Setup ==========
 
 function setupBot(argv: any) {
@@ -172,7 +198,7 @@ function registerPositionTools(server: McpServer, bot: any) {
 
   server.tool(
     "move-to-position",
-    "Move the bot to a specific position",
+    "Move or teleport the bot to a specific position (teleports in creative mode)",
     {
       x: z.number().describe("X coordinate"),
       y: z.number().describe("Y coordinate"),
@@ -181,9 +207,23 @@ function registerPositionTools(server: McpServer, bot: any) {
     },
     async ({ x, y, z, range = 1 }): Promise<McpResponse> => {
       try {
-        const goal = new goals.GoalNear(x, y, z, range);
-        await bot.pathfinder.goto(goal);
-        return createResponse(`Successfully moved to position near (${x}, ${y}, ${z})`);
+        if (bot.game.gameMode === 1 && bot.creative) {
+          // Teleport in creative mode
+          bot.entity.position.set(x, y, z);
+          bot.emit('move');
+          bot._client.write('position', {
+            x, y, z,
+            yaw: bot.entity.yaw,
+            pitch: bot.entity.pitch,
+            flags: 0x00
+          });
+          return createResponse(`Teleported to (${x}, ${y}, ${z})`);
+        } else {
+          // Use pathfinder in survival
+          const goal = new goals.GoalNear(x, y, z, range);
+          await bot.pathfinder.goto(goal);
+          return createResponse(`Successfully moved to position near (${x}, ${y}, ${z})`);
+        }
       } catch (error) {
         return createErrorResponse(error as Error);
       }
@@ -203,12 +243,13 @@ function registerInventoryTools(server: McpServer, bot: any) {
     },
     async ({ itemName, destination = 'hand' }): Promise<McpResponse> => {
       try {
-        const items = bot.inventory.items();
-        const item = items.find((item: any) => 
-          item.name.includes(itemName.toLowerCase())
-        );
+        let item = bot.inventory.items().find((i: any) => i.name.includes(itemName.toLowerCase()));
+        if (!item && bot.game.gameMode === 1 && bot.creative) {
+          // In creative, give the item
+          item = await ensureBlockInInventory(bot, itemName.toLowerCase());
+        }
         if (!item) {
-          return createResponse(`Couldn't find any item matching '${itemName}' in inventory`);
+          return createResponse(`Couldn't find or give any item matching '${itemName}'`);
         }
         await bot.equip(item, destination as mineflayer.EquipmentDestination);
         return createResponse(`Equipped ${item.name} to ${destination}`);
