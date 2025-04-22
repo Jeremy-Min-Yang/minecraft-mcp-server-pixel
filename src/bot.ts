@@ -549,7 +549,7 @@ async function main() {
     // Handle stdin end - this will detect when Claude Desktop is closed
     process.stdin.on('end', () => {
       console.error("Claude has disconnected. Shutting down...");
-      if (bot) {
+      if (bot && typeof bot.quit === 'function') {
         bot.quit();
       }
       process.exit(0);
