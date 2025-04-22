@@ -509,6 +509,12 @@ function registerPixelArtTool(server: McpServer, bot: any) {
       try {
         // === NEW: Gather all required blocks in creative ===
         if (bot.game.gameMode === 1 && bot.creative) {
+          // Clear inventory before starting build
+          for (let slot = 0; slot < bot.inventory.slots.length; slot++) {
+            if (bot.inventory.slots[slot]) {
+              await bot.creative.setInventorySlot(slot, -1, 0);
+            }
+          }
           const blockCounts = countBlocksNeeded(pixels);
           // Print out the block requirements for the user
           const blockSummary = Object.entries(blockCounts)
