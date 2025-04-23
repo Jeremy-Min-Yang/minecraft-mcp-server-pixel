@@ -203,7 +203,7 @@ function createMcpServer(bot: any) {
   registerBlockTools(server, bot);
   registerEntityTools(server, bot);
   registerChatTools(server, bot);
-  registerPixelArtTool(server, bot);
+  registerPixelArtTools(server, bot);
   
   return server;
 }
@@ -444,43 +444,102 @@ function registerChatTools(server: McpServer, bot: any) {
 
 // ========== Pixel Art Builder Tool ==========
 
-function countBlocksNeeded(pixels: string[][]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const row of pixels) {
-    for (const block of row) {
-      counts[block] = (counts[block] || 0) + 1;
-    }
-  }
-  return counts;
-}
+// Import our custom utilities and templates
+import { 
+  calculatePixelPositions, 
+  countBlocksNeeded, 
+  formatBlockRequirements, 
+  calculateOptimalBuildOrder,
+  validatePixelArt
+} from './utils/pixelArtUtils.js';
+import { pixelArtTemplates, getAllTemplateIds, getTemplateById } from './templates/pixelArtTemplates.js';
 
+/**
+ * Place a block at the specified position
+ */
 async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: number, z: number }) {
-  // Find the block in inventory
-  const item = bot.inventory.items().find((i: any) => i.name === blockType);
+  // Skip empty blocks
+  if (blockType === "") return true;
+  
+  // Find or get the block in inventory
+  let item = bot.inventory.items().find((i: any) => i.name === blockType);
+  if (!item && bot.game.gameMode === 1 && bot.creative) {
+    // In creative, give the item
+    item = await ensureBlockInInventory(bot, blockType);
+  }
+  
   if (!item) {
     bot.chat(`Missing block: ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
     return false;
   }
+  
   // Equip the block
   await bot.equip(item, 'hand');
-  // Find a block to place against (try below)
+  
+  // Find a block to place against (try below first)
   const referencePos = new Vec3(pos.x, pos.y - 1, pos.z);
   const referenceBlock = bot.blockAt(referencePos);
+  
   if (!isPlaceableFloor(referenceBlock)) {
-    bot.chat(`No placeable floor to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
-    return false;
+    // Try other sides if below doesn't work
+    const sides = [
+      { x: pos.x + 1, y: pos.y, z: pos.z },
+      { x: pos.x - 1, y: pos.y, z: pos.z },
+      { x: pos.x, y: pos.y, z: pos.z + 1 },
+      { x: pos.x, y: pos.y, z: pos.z - 1 },
+      { x: pos.x, y: pos.y + 1, z: pos.z }
+    ];
+    
+    let foundSide = false;
+    for (const side of sides) {
+      const sideBlock = bot.blockAt(new Vec3(side.x, side.y, side.z));
+      if (isPlaceableFloor(sideBlock)) {
+        // Calculate the face vector
+        const faceVector = new Vec3(
+          pos.x - side.x,
+          pos.y - side.y,
+          pos.z - side.z
+        );
+        
+        // Move close to the target if needed
+        if (!bot.canSeeBlock(sideBlock)) {
+          const goal = new goals.GoalNear(side.x, side.y, side.z, 2);
+          await bot.pathfinder.goto(goal);
+        }
+        
+        // Look at the target
+        await bot.lookAt(new Vec3(pos.x, pos.y, pos.z), true);
+        
+        // Try to place the block
+        try {
+          await bot.placeBlock(sideBlock, faceVector);
+          return true;
+        } catch (error) {
+          continue;
+        }
+        
+        foundSide = true;
+        break;
+      }
+    }
+    
+    if (!foundSide) {
+      bot.chat(`No placeable surface around ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+      return false;
+    }
   }
+  
   // If the block is above the bot, fly up to it (creative mode only)
   if (bot.game.gameMode === 1 && bot.creative) {
     const botPos = bot.entity.position;
     if (pos.y > botPos.y + 1 || pos.y < botPos.y - 2 || botPos.distanceTo(new Vec3(pos.x, botPos.y, pos.z)) > 4) {
       // Move/fly close to the block position, but not inside the block
-      bot.entity.position.set(pos.x + 0.5, pos.y + 1.5, pos.z + 0.5);
+      bot.entity.position.set(pos.x, pos.y, pos.z);
       bot.emit('move');
       bot._client.write('position', {
-        x: pos.x + 0.5,
-        y: pos.y + 1.5,
-        z: pos.z + 0.5,
+        x: pos.x,
+        y: pos.y,
+        z: pos.z,
         yaw: bot.entity.yaw,
         pitch: bot.entity.pitch,
         flags: 0x00
@@ -488,17 +547,22 @@ async function placeBlockAt(bot: any, blockType: string, pos: { x: number, y: nu
       await new Promise(res => setTimeout(res, 100));
     }
   }
+  
+  // Look at the reference
+  await bot.lookAt(referencePos, true);
+  
   // Place the block
   try {
     await bot.placeBlock(referenceBlock, new Vec3(0, 1, 0));
     return true;
   } catch (err) {
-    bot.chat(`Failed to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z})`);
+    bot.chat(`Failed to place ${blockType} at (${pos.x}, ${pos.y}, ${pos.z}): ${(err as Error).message}`);
     return false;
   }
 }
 
-function registerPixelArtTool(server: McpServer, bot: any) {
+function registerPixelArtTools(server: McpServer, bot: any) {
+  // Main pixel art builder tool
   server.tool(
     "build-pixel-art",
     "Build a pixel art image from a 2D array of block types",
@@ -509,79 +573,157 @@ function registerPixelArtTool(server: McpServer, bot: any) {
         y: z.number(),
         z: z.number()
       }).describe("Origin position"),
-      direction: z.enum(["north", "south", "east", "west"]).default("north")
+      direction: z.enum(["north", "south", "east", "west"]).default("north").describe("Direction to build (default: north)"),
+      verticalBuild: z.boolean().optional().describe("Build vertically on a wall instead of horizontally on the ground (default: false)"),
+      scale: z.number().optional().describe("Scale factor for the pixel art (default: 1)"),
+      mirrorX: z.boolean().optional().describe("Mirror the pixel art horizontally (default: false)"),
+      mirrorY: z.boolean().optional().describe("Mirror the pixel art vertically (default: false)")
     },
-    async ({ pixels, origin, direction }) => {
+    async ({ pixels, origin, direction, verticalBuild = false, scale = 1, mirrorX = false, mirrorY = false }) => {
       try {
+        // Validate pixel art input
+        const validation = validatePixelArt(pixels);
+        if (!validation.valid) {
+          return createErrorResponse(validation.error || "Invalid pixel art format");
+        }
+        
+        // Calculate block requirements
+        const blockCounts = countBlocksNeeded(pixels);
+        const blockSummary = formatBlockRequirements(blockCounts);
+        
+        // Prepare build environment
         if (bot.game.gameMode === 1 && bot.creative) {
           // Clear inventory before starting build
-          for (let slot = 0; slot < bot.inventory.slots.length; slot++) {
+          for (let slot = 0; slot < 9; slot++) {
             if (bot.inventory.slots[slot]) {
               await bot.creative.setInventorySlot(slot, -1, 0);
             }
           }
-        }
-        const blockCounts = countBlocksNeeded(pixels);
-        // Print out the block requirements for the user
-        const blockSummary = Object.entries(blockCounts)
-          .map(([block, count]) => `${block}: ${count}`)
-          .join(", ");
-        bot.chat(`Blocks needed for pixel art: ${blockSummary}`);
-        await bot.pathfinder.goto(new goals.GoalNear(origin.x, origin.y, origin.z, 1));
-        bot.chat("Starting pixel art build!");
-        for (let row = 0; row < pixels.length; row++) {
-          for (let col = 0; col < pixels[row].length; col++) {
-            const blockType = pixels[row][col];
-            // Calculate world position based on direction, build horizontally (Y is constant)
-            let x = origin.x, z = origin.z, y = origin.y;
-            if (direction === "north") {
-              x += col;
-              z -= row;
-            } else if (direction === "south") {
-              x += col;
-              z += row;
-            } else if (direction === "east") {
-              x += row;
-              z += col;
-            } else if (direction === "west") {
-              x -= row;
-              z += col;
+          
+          // Pre-populate hotbar with needed blocks
+          let slotIndex = 0;
+          for (const blockType of Object.keys(blockCounts)) {
+            if (slotIndex < 9 && blockType !== "") {
+              await ensureBlockInInventory(bot, blockType);
+              slotIndex++;
             }
-            // Ensure the block is in inventory and equipped
-            await ensureBlockInInventory(bot, blockType);
-            // Check for placeable block below
-            const belowPos = new Vec3(x, y - 1, z);
-            const belowBlock = bot.blockAt(belowPos);
-            if (!isPlaceableFloor(belowBlock)) {
-              bot.chat(`Cannot place ${blockType} at (${x}, ${y}, ${z}): no placeable block below.`);
-              continue;
-            }
-            // Move one block away from the target position before placing
-            const botPos = bot.entity.position;
-            let dx = x - Math.floor(botPos.x);
-            let dz = z - Math.floor(botPos.z);
-            // If already at the target, pick a direction to move away
-            if (dx === 0 && dz === 0) dz = 1;
-            // Normalize to one block away
-            if (Math.abs(dx) > Math.abs(dz)) {
-              dx = dx > 0 ? 1 : -1;
-              dz = 0;
-            } else {
-              dz = dz > 0 ? 1 : -1;
-              dx = 0;
-            }
-            const moveAwayPos = new Vec3(x + dx, y, z + dz);
-            await bot.pathfinder.goto(new goals.GoalNear(moveAwayPos.x, moveAwayPos.y, moveAwayPos.z, 0));
-            // Place the block
-            await placeBlockAt(bot, blockType, { x, y, z });
-            // Move away again after placing (opposite direction)
-            const moveAwayPos2 = new Vec3(x - dx, y, z - dz);
-            await bot.pathfinder.goto(new goals.GoalNear(moveAwayPos2.x, moveAwayPos2.y, moveAwayPos2.z, 0));
           }
-          bot.chat(`Finished row ${row + 1} of ${pixels.length}`);
         }
+        
+        // Print out the block requirements for the user
+        bot.chat(`Blocks needed for pixel art: ${blockSummary}`);
+        bot.chat(`Building ${pixels.length}x${pixels[0].length} pixel art facing ${direction}${verticalBuild ? ' vertically' : ''}`);
+        
+        // Move to the origin position
+        await bot.pathfinder.goto(new goals.GoalNear(origin.x, origin.y, origin.z, 2));
+        
+        // Calculate all pixel positions
+        const pixelPositions = calculatePixelPositions({
+          pixels,
+          origin,
+          direction,
+          verticalBuild,
+          mirrorX,
+          mirrorY,
+          scale
+        });
+        
+        // Optimize build order
+        const optimizedOrder = calculateOptimalBuildOrder(pixelPositions);
+        
+        // Start building
+        bot.chat("Starting pixel art build!");
+        
+        let placedCount = 0;
+        const totalCount = optimizedOrder.length;
+        
+        for (const pixel of optimizedOrder) {
+          const success = await placeBlockAt(bot, pixel.blockType, { x: pixel.x, y: pixel.y, z: pixel.z });
+          if (success) placedCount++;
+          
+          // Report progress at 25%, 50%, 75%, and 100%
+          if (placedCount % Math.ceil(totalCount / 4) === 0 || placedCount === totalCount) {
+            const percentage = Math.floor((placedCount / totalCount) * 100);
+            bot.chat(`Building progress: ${percentage}% complete (${placedCount}/${totalCount} blocks)`);
+          }
+        }
+        
         bot.chat("Pixel art build complete!");
-        return createResponse("Pixel art build complete!");
+        return createResponse(`Successfully built pixel art with ${placedCount} blocks!`);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+  
+  // Template listing tool
+  server.tool(
+    "list-pixel-art-templates",
+    "List available pixel art templates",
+    {
+      tag: z.string().optional().describe("Filter templates by tag (optional)")
+    },
+    async ({ tag }) => {
+      try {
+        const templateIds = getAllTemplateIds();
+        
+        if (templateIds.length === 0) {
+          return createResponse("No pixel art templates available.");
+        }
+        
+        let response = "Available pixel art templates:\n\n";
+        
+        for (const id of templateIds) {
+          const template = getTemplateById(id);
+          if (template && (!tag || template.tags.includes(tag))) {
+            response += `- ${template.name} (${template.pixels.length}x${template.pixels[0].length}): ${template.description}\n  Tags: ${template.tags.join(", ")}\n  Use with template_id: "${id}"\n\n`;
+          }
+        }
+        
+        return createResponse(response);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+  
+  // Build from template tool
+  server.tool(
+    "build-pixel-art-from-template",
+    "Build a pixel art from a predefined template",
+    {
+      template_id: z.string().describe("Template ID from list-pixel-art-templates"),
+      origin: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      }).describe("Origin position"),
+      direction: z.enum(["north", "south", "east", "west"]).default("north").describe("Direction to build (default: north)"),
+      verticalBuild: z.boolean().optional().describe("Build vertically on a wall instead of horizontally on the ground (default: false)"),
+      scale: z.number().optional().describe("Scale factor for the pixel art (default: 1)"),
+      blockMapping: z.record(z.string(), z.string()).optional().describe("Optional mapping to replace template blocks with different blocks")
+    },
+    async ({ template_id, origin, direction, verticalBuild = false, scale = 1, blockMapping = {} }) => {
+      try {
+        const template = getTemplateById(template_id);
+        
+        if (!template) {
+          return createErrorResponse(`Template with ID "${template_id}" not found. Use list-pixel-art-templates to see available templates.`);
+        }
+        
+        // Apply block mapping to template pixels
+        const pixels = template.pixels.map(row =>
+          row.map(block => blockMapping[block] || block)
+        );
+        
+        // Use the standard pixel art builder with the template pixels
+        return server.executeToolWithSchema("build-pixel-art", {
+          pixels,
+          origin,
+          direction,
+          verticalBuild,
+          scale
+        });
       } catch (error) {
         return createErrorResponse(error as Error);
       }
