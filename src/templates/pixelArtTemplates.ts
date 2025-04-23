@@ -205,6 +205,34 @@ export const pixelArtTemplates: Record<string, PixelArtTemplate> = {
       "red_concrete": ["red_wool", "red_terracotta", "poppy"],
       "yellow_concrete": ["yellow_wool", "gold_block", "honeycomb_block"]
     }
+  },
+  
+  "thunder_logo": {
+    name: "Thunder Logo",
+    description: "Oklahoma City Thunder logo (15x15)",
+    pixels: [
+      ["", "", "", "", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", "", "", "", ""],
+      ["", "", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", "", ""],
+      ["", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", ""],
+      ["", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", ""],
+      ["", "blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", ""],
+      ["blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete"],
+      ["blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "white_concrete", "white_concrete", "white_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete"],
+      ["blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "white_concrete", "white_concrete", "white_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete"],
+      ["blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "white_concrete", "white_concrete", "white_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete"],
+      ["blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete"],
+      ["", "blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", ""],
+      ["", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "orange_concrete", "orange_concrete", "orange_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", ""],
+      ["", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", ""],
+      ["", "", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", "", ""],
+      ["", "", "", "", "", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "blue_concrete", "", "", "", "", ""]
+    ],
+    tags: ["sports", "basketball", "logo", "medium"],
+    recommendedBlocks: {
+      "blue_concrete": ["blue_wool", "light_blue_concrete", "blue_terracotta"],
+      "orange_concrete": ["orange_wool", "orange_terracotta", "gold_block"],
+      "white_concrete": ["white_wool", "quartz_block", "bone_block"]
+    }
   }
 };
 
