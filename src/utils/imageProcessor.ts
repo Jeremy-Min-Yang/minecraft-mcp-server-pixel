@@ -214,15 +214,45 @@ export async function processImageUrl(
   options: { dithering?: boolean } = {}
 ): Promise<string[][]> {
   try {
+    console.error(`Attempting to download image from: ${imageUrl}`);
+    
+    // Try to clean the URL if it's from Claude
+    if (imageUrl.includes('claude.ai') || imageUrl.includes('anthropic')) {
+      console.error('Detected Claude/Anthropic URL, cleaning URL format...');
+      // Strip CDN parameters to get direct access
+      imageUrl = imageUrl.replace(/\?.*$/, '');
+      console.error(`Cleaned URL: ${imageUrl}`);
+    }
+    
     // Attempt to download and process the image
-    let image = await Jimp.read(imageUrl);
+    let image;
+    try {
+      image = await Jimp.read(imageUrl);
+    } catch (downloadError) {
+      console.error('Direct download failed, trying with fetch:', downloadError);
+      // Try to use fetch API as a fallback for URLs that might need special handling
+      try {
+        const fetch = (await import('node-fetch')).default;
+        const response = await fetch(imageUrl);
+        if (!response.ok) {
+          throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+        const buffer = await response.buffer();
+        image = await Jimp.read(buffer);
+      } catch (fetchError) {
+        console.error('Fetch method also failed:', fetchError);
+        throw new Error(`All download methods failed for URL: ${imageUrl}`);
+      }
+    }
     
     // Apply dithering if requested
     if (options.dithering) {
       image = image.dither16();
     }
     
-    return processJimpImage(image, maxHeight);
+    const result = processJimpImage(image, maxHeight);
+    console.error(`Successfully processed image: ${result.length}x${result[0].length} pixels`);
+    return result;
   } catch (error) {
     console.error('Error processing image URL:', error);
     throw new Error(`Failed to process image URL: ${error}`);

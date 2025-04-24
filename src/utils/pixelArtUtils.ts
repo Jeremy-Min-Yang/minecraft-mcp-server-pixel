@@ -1,155 +1,207 @@
 import { Vec3 } from 'vec3';
-import { BlockPosition } from 'mineflayer';
+import { Bot } from 'mineflayer';
+import { imageToVerticalWall, imageBase64ToVerticalWall } from './imageToPixelArt.js';
+import { executeCommand, executeCommands, splitFillCommand } from './commandUtils.js';
+import * as fs from 'fs';
+import * as path from 'path';
 
-export interface BlockWithPosition {
-  blockType: string;
+export interface BlockPosition {
   x: number;
   y: number;
   z: number;
 }
 
-export interface PixelArtOptions {
-  pixels: string[][];
+export interface BuildParameters {
   origin: BlockPosition;
-  direction: "north" | "south" | "east" | "west";
-  verticalBuild?: boolean;
-  mirrorX?: boolean;
-  mirrorY?: boolean;
-  scale?: number;
+  pixels: string[][];
+  direction: 'north' | 'south' | 'east' | 'west';
 }
 
 /**
- * Calculate the world position for each pixel in the pixel art
+ * Build pixel art in Minecraft
+ * @param bot Mineflayer bot instance
+ * @param params Build parameters
  */
-export function calculatePixelPositions(options: PixelArtOptions): BlockWithPosition[] {
-  const { pixels, origin, direction, verticalBuild = false, mirrorX = false, mirrorY = false, scale = 1 } = options;
-  const result: BlockWithPosition[] = [];
+export async function buildPixelArt(bot: any, params: BuildParameters): Promise<void> {
+  const { origin, pixels, direction } = params;
   
-  const height = pixels.length;
-  const width = pixels[0].length;
-  
-  for (let row = 0; row < height; row++) {
-    for (let col = 0; col < width; col++) {
-      // Skip empty cells (represented by empty strings)
-      const blockType = pixels[row][col];
-      if (blockType === "") continue;
-      
-      // Apply mirroring if needed
-      const effectiveRow = mirrorY ? height - 1 - row : row;
-      const effectiveCol = mirrorX ? width - 1 - col : col;
-      
-      // Calculate position based on direction and build orientation
-      let x = origin.x, y = origin.y, z = origin.z;
-      
-      if (verticalBuild) {
-        // Vertical build (on a wall)
-        if (direction === "north") {
-          x += effectiveCol * scale;
-          y += (height - 1 - effectiveRow) * scale;
-          z -= 0;
-        } else if (direction === "south") {
-          x += effectiveCol * scale;
-          y += (height - 1 - effectiveRow) * scale;
-          z += 0;
-        } else if (direction === "east") {
-          x += 0;
-          y += (height - 1 - effectiveRow) * scale;
-          z += effectiveCol * scale;
-        } else if (direction === "west") {
-          x -= 0;
-          y += (height - 1 - effectiveRow) * scale;
-          z += effectiveCol * scale;
-        }
-      } else {
-        // Horizontal build (on the ground)
-        if (direction === "north") {
-          x += effectiveCol * scale;
-          z -= effectiveRow * scale;
-        } else if (direction === "south") {
-          x += effectiveCol * scale;
-          z += effectiveRow * scale;
-        } else if (direction === "east") {
-          x += effectiveRow * scale;
-          z += effectiveCol * scale;
-        } else if (direction === "west") {
-          x -= effectiveRow * scale;
-          z += effectiveCol * scale;
-        }
-      }
-      
-      result.push({
-        blockType,
-        x,
-        y,
-        z
-      });
-    }
+  // Validate game mode and OP status
+  const botStatus = getBotStatus(bot);
+  if (!botStatus.isCreative) {
+    console.log('Not in creative mode. Attempting to switch...');
+    bot.chat('/gamemode creative');
+    // Wait a bit for gamemode to change
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
-  return result;
-}
-
-/**
- * Count the blocks needed for a pixel art
- */
-export function countBlocksNeeded(pixels: string[][]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  
-  for (const row of pixels) {
-    for (const blockType of row) {
-      if (blockType !== "") {
-        counts[blockType] = (counts[blockType] || 0) + 1;
-      }
-    }
+  if (!botStatus.isOP) {
+    console.log('Warning: Bot is not OP. Some functions may not work properly.');
   }
   
-  return counts;
-}
-
-/**
- * Format block requirements for display
- */
-export function formatBlockRequirements(blockCounts: Record<string, number>): string {
-  return Object.entries(blockCounts)
-    .map(([block, count]) => `${block}: ${count}`)
-    .join(", ");
-}
-
-/**
- * Calculate the optimal build order to minimize movement
- */
-export function calculateOptimalBuildOrder(blocks: BlockWithPosition[]): BlockWithPosition[] {
-  // Simple implementation: sort by Y (bottom to top), then by distance from origin
-  return [...blocks].sort((a, b) => {
-    // First sort by Y coordinate (build from bottom to top)
-    if (a.y !== b.y) return a.y - b.y;
+  // Configure direction offsets
+  const directionOffsets = {
+    north: { x: 1, y: 0, z: 0 },
+    south: { x: 1, y: 0, z: 0 },
+    east: { x: 0, y: 0, z: 1 },
+    west: { x: 0, y: 0, z: 1 }
+  };
+  
+  const offset = directionOffsets[direction];
+  
+  // Build the pixel art using fill commands instead of individual blocks
+  // This is much faster and more reliable
+  
+  // Group blocks by type and row for efficient building
+  for (let y = 0; y < pixels.length; y++) {
+    let currentBlockType: string | null = null;
+    let startX = 0;
     
-    // Then sort by distance from origin (X-Z plane)
-    const distA = Math.sqrt(a.x * a.x + a.z * a.z);
-    const distB = Math.sqrt(b.x * b.x + b.z * b.z);
-    return distA - distB;
-  });
-}
-
-/**
- * Validate pixel art input
- */
-export function validatePixelArt(pixels: string[][]): { valid: boolean; error?: string } {
-  if (!Array.isArray(pixels) || pixels.length === 0) {
-    return { valid: false, error: "Pixels must be a non-empty 2D array" };
-  }
-  
-  const width = pixels[0].length;
-  if (width === 0) {
-    return { valid: false, error: "Each row must have at least one column" };
-  }
-  
-  // Check that all rows have the same width
-  for (let i = 1; i < pixels.length; i++) {
-    if (!Array.isArray(pixels[i]) || pixels[i].length !== width) {
-      return { valid: false, error: `Row ${i} has different width than the first row` };
+    for (let x = 0; x < pixels[y].length; x++) {
+      const blockType = pixels[y][x];
+      
+      if (blockType === currentBlockType) {
+        // Continue current fill
+        continue;
+      } else {
+        // End previous fill if there was one
+        if (currentBlockType !== null && currentBlockType !== 'air' && x > startX) {
+          // Calculate position based on direction
+          let pos1, pos2;
+          
+          switch (direction) {
+            case 'north':
+              pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+              pos2 = { x: origin.x + x - 1, y: origin.y + y, z: origin.z };
+              break;
+            case 'south':
+              pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+              pos2 = { x: origin.x + x - 1, y: origin.y + y, z: origin.z };
+              break;
+            case 'east':
+              pos1 = { x: origin.x, y: origin.y + y, z: origin.z + startX };
+              pos2 = { x: origin.x, y: origin.y + y, z: origin.z + x - 1 };
+              break;
+            case 'west':
+              pos1 = { x: origin.x, y: origin.y + y, z: origin.z + startX };
+              pos2 = { x: origin.x, y: origin.y + y, z: origin.z + x - 1 };
+              break;
+            default:
+              pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+              pos2 = { x: origin.x + x - 1, y: origin.y + y, z: origin.z };
+          }
+          
+          try {
+            // Use fill command for efficiency
+            const fillCommand = `/fill ${pos1.x} ${pos1.y} ${pos1.z} ${pos2.x} ${pos2.y} ${pos2.z} ${currentBlockType}`;
+            bot.chat(fillCommand);
+            
+            // Wait a small amount to prevent command overflow
+            await new Promise(resolve => setTimeout(resolve, 50));
+          } catch (error) {
+            console.error(`Error executing fill command: ${error}`);
+          }
+        }
+        
+        // Start new fill
+        currentBlockType = blockType;
+        startX = x;
+      }
+    }
+    
+    // End fill for end of row
+    if (currentBlockType !== null && currentBlockType !== 'air' && startX < pixels[y].length) {
+      // Calculate position based on direction
+      let pos1, pos2;
+      
+      switch (direction) {
+        case 'north':
+          pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+          pos2 = { x: origin.x + pixels[y].length - 1, y: origin.y + y, z: origin.z };
+          break;
+        case 'south':
+          pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+          pos2 = { x: origin.x + pixels[y].length - 1, y: origin.y + y, z: origin.z };
+          break;
+        case 'east':
+          pos1 = { x: origin.x, y: origin.y + y, z: origin.z + startX };
+          pos2 = { x: origin.x, y: origin.y + y, z: origin.z + pixels[y].length - 1 };
+          break;
+        case 'west':
+          pos1 = { x: origin.x, y: origin.y + y, z: origin.z + startX };
+          pos2 = { x: origin.x, y: origin.y + y, z: origin.z + pixels[y].length - 1 };
+          break;
+        default:
+          pos1 = { x: origin.x + startX, y: origin.y + y, z: origin.z };
+          pos2 = { x: origin.x + pixels[y].length - 1, y: origin.y + y, z: origin.z };
+      }
+      
+      try {
+        // Use fill command for efficiency
+        const fillCommand = `/fill ${pos1.x} ${pos1.y} ${pos1.z} ${pos2.x} ${pos2.y} ${pos2.z} ${currentBlockType}`;
+        bot.chat(fillCommand);
+        
+        // Wait a small amount to prevent command overflow
+        await new Promise(resolve => setTimeout(resolve, 50));
+      } catch (error) {
+        console.error(`Error executing fill command: ${error}`);
+      }
+    }
+    
+    // Report progress every 10 rows
+    if (y % 10 === 0 || y === pixels.length - 1) {
+      const progress = Math.floor((y / pixels.length) * 100);
+      console.log(`Building progress: ${progress}%`);
     }
   }
   
-  return { valid: true };
+  console.log(`Pixel art building complete.`);
+}
+
+/**
+ * Build pixel art from base64 image data
+ * @param bot Mineflayer bot instance
+ * @param base64Data Base64 encoded image data
+ * @param origin Origin position for building
+ * @param direction Build direction
+ */
+export async function buildPixelArtFromBase64(
+  bot: any,
+  base64Data: string,
+  origin: BlockPosition,
+  direction: 'north' | 'south' | 'east' | 'west' = 'south'
+): Promise<void> {
+  try {
+    console.log('Processing base64 image data');
+    const pixels = await imageBase64ToVerticalWall(base64Data);
+    
+    console.log(`Building pixel art with ${pixels.length} columns and ${pixels[0].length} rows`);
+    
+    await buildPixelArt(bot, {
+      origin,
+      pixels,
+      direction
+    });
+  } catch (error) {
+    console.error(`Error building pixel art from base64: ${error}`);
+    throw error;
+  }
+}
+
+/**
+ * Get bot status (game mode and OP status)
+ * @param bot Mineflayer bot instance
+ * @returns Object containing isCreative and isOP flags
+ */
+export function getBotStatus(bot: any): { isCreative: boolean; isOP: boolean } {
+  // Check game mode - handle both number and string representations
+  // Game mode can be 1 or 'creative' for creative mode
+  const gameMode = bot.player?.gamemode;
+  const isCreative = (gameMode === 1) || 
+    (typeof gameMode === 'string' && (gameMode === '1' || gameMode.toLowerCase() === 'creative'));
+  
+  // Check OP status
+  // Different bot implementations might store OP status differently
+  const isOP = !!(bot.player && (bot.player.op || (bot as any).isOp || bot.isOp));
+  
+  return { isCreative, isOP };
 }

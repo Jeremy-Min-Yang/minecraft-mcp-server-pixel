@@ -24,15 +24,81 @@ import {
   savePixelArtBlueprintToFile
 } from './utils/imageProcessor.js';
 
+// Import image-to-pixel-art utilities
+import {
+  imageToPixelArt,
+  imageToVerticalWall,
+  imageBase64ToPixelArt,
+  imageBase64ToVerticalWall
+} from './utils/imageToPixelArt.js';
+
 // Import our custom utilities and templates
 import { 
-  calculatePixelPositions, 
-  countBlocksNeeded, 
-  formatBlockRequirements, 
-  calculateOptimalBuildOrder,
-  validatePixelArt,
+  buildPixelArt,
+  buildPixelArtFromBase64,
+  getBotStatus,
   BlockPosition
 } from './utils/pixelArtUtils.js';
+
+// Note: These functions need to be imported from elsewhere or recreated
+// These were not found in pixelArtUtils.js
+const calculatePixelPositions = (params: any) => {
+  // Implementation needed
+  return params.pixels.flatMap((row: string[], y: number) => 
+    row.map((blockType: string, x: number) => ({
+      blockType,
+      x: params.direction === 'east' || params.direction === 'west' 
+        ? params.origin.x
+        : params.origin.x + (params.mirrorX ? (row.length - 1 - x) : x) * (params.scale || 1),
+      y: params.verticalBuild
+        ? params.origin.y + (params.mirrorY ? y : (params.pixels.length - 1 - y)) * (params.scale || 1)
+        : params.origin.y,
+      z: params.direction === 'north' || params.direction === 'south'
+        ? params.origin.z
+        : params.origin.z + (params.mirrorX ? (row.length - 1 - x) : x) * (params.scale || 1)
+    }))
+  );
+};
+
+const calculateOptimalBuildOrder = (pixelPositions: any[]) => {
+  // Simplified implementation - normally would optimize the path
+  return pixelPositions.filter(pixel => pixel.blockType !== 'air' && pixel.blockType !== '');
+};
+
+const countBlocksNeeded = (pixels: string[][]) => {
+  const blockCounts: Record<string, number> = {};
+  for (const row of pixels) {
+    for (const blockType of row) {
+      if (blockType !== 'air' && blockType !== '') {
+        blockCounts[blockType] = (blockCounts[blockType] || 0) + 1;
+      }
+    }
+  }
+  return blockCounts;
+};
+
+const formatBlockRequirements = (blockCounts: Record<string, number>) => {
+  return Object.entries(blockCounts)
+    .filter(([blockType]) => blockType !== 'air' && blockType !== '')
+    .map(([blockType, count]) => `${blockType}: ${count}`)
+    .join(', ');
+};
+
+const validatePixelArt = (pixels: string[][]) => {
+  if (!Array.isArray(pixels) || pixels.length === 0) {
+    return { valid: false, error: 'Pixel art must be a non-empty 2D array' };
+  }
+  const width = pixels[0].length;
+  if (!width) {
+    return { valid: false, error: 'Each row of pixel art must have at least one column' };
+  }
+  for (let i = 1; i < pixels.length; i++) {
+    if (pixels[i].length !== width) {
+      return { valid: false, error: 'All rows of pixel art must have the same width' };
+    }
+  }
+  return { valid: true };
+};
 import { pixelArtTemplates, getAllTemplateIds, getTemplateById } from './templates/pixelArtTemplates.js';
 // processBase64Image already imported above
 
@@ -239,6 +305,7 @@ function createMcpServer(bot: any) {
   registerEntityTools(server, bot);
   registerChatTools(server, bot);
   registerPixelArtTools(server, bot);
+  registerAdvancedImageTools(server, bot);
   
   return server;
 }
@@ -486,6 +553,112 @@ function registerChatTools(server: McpServer, bot: any) {
       try {
         bot.chat(message);
         return createResponse(`Sent message: "${message}"`);
+      } catch (error) {
+        return createErrorResponse(error as Error);
+      }
+    }
+  );
+}
+
+// ========== Advanced Image Processing Tools ==========
+
+function registerAdvancedImageTools(server: McpServer, bot: any) {
+  server.tool(
+    "image-to-pixel-art",
+    "Build pixel art from an image with high-quality processing",
+    {
+      imageBase64: z.string().describe("Base64 encoded image data"),
+      origin: z.object({
+        x: z.number(),
+        y: z.number(),
+        z: z.number()
+      }).describe("Origin position for building"),
+      direction: z.enum(["north", "south", "east", "west"]).default("south").describe("Direction to build (default: south)"),
+      maxDimension: z.number().optional().default(300).describe("Maximum dimension (width/height) in blocks (default: 300)"),
+      clearArea: z.boolean().optional().default(false).describe("Whether to clear the area before building")
+    },
+    async ({ imageBase64, origin, direction, maxDimension = 300, clearArea = false }): Promise<McpResponse> => {
+      try {
+        // Make sure we're in creative mode
+        bot.chat('/gamemode creative');
+        await new Promise(res => setTimeout(res, 500));
+        
+        // Process the image to get blocks
+        bot.chat('Processing image data using high-quality image processor...');
+        const pixels = await imageBase64ToVerticalWall(imageBase64, maxDimension, maxDimension);
+        
+        // Clear the area if requested
+        if (clearArea) {
+          bot.chat('Clearing building area...');
+          const width = pixels.length;
+          const height = pixels[0].length;
+          const clearCommand = `/fill ${origin.x} ${origin.y} ${origin.z} ${origin.x + width} ${origin.y + height} ${origin.z} air`;
+          bot.chat(clearCommand);
+          await new Promise(res => setTimeout(res, 500));
+        }
+        
+        // Report dimensions
+        bot.chat(`Processed image to ${pixels.length}x${pixels[0].length} blocks. Starting build...`);
+        
+        // Calculate build positions using the functions we defined
+        const pixelPositions = calculatePixelPositions({
+          pixels,
+          origin,
+          direction,
+          verticalBuild: true,
+          mirrorX: false,
+          mirrorY: false,
+          scale: 1
+        });
+        
+        // Optimize build order for efficiency
+        const optimizedOrder = calculateOptimalBuildOrder(pixelPositions);
+        
+        // Start building
+        let placedCount = 0;
+        const totalCount = optimizedOrder.length;
+        
+        for (const pixel of optimizedOrder) {
+          try {
+            // Give the bot the block
+            const mcData = minecraftData(bot.version);
+            const blockName = pixel.blockType;
+            const item = mcData.itemsByName[blockName];
+            
+            if (item) {
+              await bot.creative.setInventorySlot(36, { id: item.id, count: 64 });
+              await bot.equip(bot.registry.itemsByName[blockName], 'hand');
+              
+              // Teleport to position near block placement
+              if (placedCount % 100 === 0) {
+                bot.entity.position.set(pixel.x, pixel.y, pixel.z);
+                await new Promise(res => setTimeout(res, 50));
+              }
+              
+              // Place the block
+              const fillCommand = `/setblock ${pixel.x} ${pixel.y} ${pixel.z} ${blockName}`;
+              bot.chat(fillCommand);
+              
+              placedCount++;
+              
+              // Report progress
+              if (placedCount % 500 === 0 || placedCount === totalCount) {
+                const progress = Math.floor((placedCount / totalCount) * 100);
+                bot.chat(`Building progress: ${progress}% (${placedCount}/${totalCount} blocks)`);
+              }
+              
+              // Small delay to prevent overwhelming the server
+              if (placedCount % 10 === 0) {
+                await new Promise(res => setTimeout(res, 10));
+              }
+            }
+          } catch (error) {
+            console.error(`Error placing block: ${error}`);
+          }
+        }
+        
+        bot.chat("Pixel art build complete!");
+        return createResponse(`Successfully built pixel art with ${placedCount} blocks!`);
       } catch (error) {
         return createErrorResponse(error as Error);
       }

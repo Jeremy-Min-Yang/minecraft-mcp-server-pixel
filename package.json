@@ -25,9 +25,15 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.9.0",
+    "axios": "^1.8.4",
+    "buffer": "^6.0.3",
+    "color-diff": "^1.4.0",
+    "jimp": "^0.22.12",
     "minecraft-data": "^3.85.0",
     "mineflayer": "^4.27.0",
     "mineflayer-pathfinder": "^2.4.2",
+    "node-fetch": "^3.3.2",
+    "sharp": "^0.34.1",
     "vec3": "^0.1.8",
     "yargs": "^17.7.2",
     "zod": "^3.24.2"
@@ -44,4 +50,4 @@
   "engines": {
     "node": ">=16.0.0"
   }
-} 
+}
