@@ -108,11 +108,11 @@ Once connected, Claude can use these commands to control the Minecraft bot:
 - `send-chat` — Send a chat message in-game
 
 ### Pixel Art
-- `build-pixel-art` — Build a pixel art image from a 2D array of block types
+- `build-pixel-art` — Build a pixel art image from a 2D array of block types or given description of user
 
 ## 🎨 Pixel Art Example
 
-To create pixel art, provide a 2D array of block types, an origin point, and a direction:
+To create pixel art, provide a 2D array of block types, an origin point, and a direction or ask the LLM to create certain image:
 
 ```javascript
 // Example pixel art command
