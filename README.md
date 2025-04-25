@@ -8,7 +8,7 @@ MinecraftBuildMCP is a Model Context Protocol (MCP) server that enables Claude (
 
 ## 🌟 Features
 
-- **AI-Powered Bot Control**: Interface directly with Claude Desktop to control Minecraft
+- **AI-Powered Bot Control**: Interact directly with Claude Desktop(or LLMs) to control a Minecraft bot
 - **Pixel Art Creation**: Build complex pixel art designs automatically
 - **Navigation**: Move around the Minecraft world with ease
 - **Block Placement**: Place blocks precisely at specified coordinates
